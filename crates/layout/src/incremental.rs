@@ -37,7 +37,7 @@ pub(crate) struct PageState {
     notes: Vec<NoteBox>,
     carry: Vec<NoteBox>,
     orig_bottom: f32,
-    prev: Option<(String, bool, f32)>,
+    prev: Option<(String, bool, f32, bool, bool)>,
     excl: Vec<crate::WrapArea>,
     float_tables: Vec<Rect>,
     line_no: u32,
@@ -131,7 +131,8 @@ impl PageState {
             && note_sig(&self.notes) == note_sig(&o.notes)
             && note_sig(&self.carry) == note_sig(&o.carry)
             && f(self.orig_bottom, o.orig_bottom)
-            && self.prev.as_ref().map(|(s, c, a)| (s, c, a.to_bits())) == o.prev.as_ref().map(|(s, c, a)| (s, c, a.to_bits()))
+            && self.prev.as_ref().map(|(s, c, a, b0, b1)| (s, c, a.to_bits(), b0, b1))
+                == o.prev.as_ref().map(|(s, c, a, b0, b1)| (s, c, a.to_bits(), b0, b1))
             && self.excl == o.excl
             && self.float_tables == o.float_tables
             && self.line_no == o.line_no
