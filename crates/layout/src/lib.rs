@@ -478,6 +478,9 @@ pub struct LayoutCache {
     outlines: HashMap<(String, usize, usize, [u32; 4]), Option<Arc<Vec<(f32, f32)>>>>,
     env: u64,
     used: HashSet<Key>,
+    /// Paragraph layouts kept by the last eviction (or used by the last full pass): incremental
+    /// passes evict again when the cache has grown well past it.
+    kept: usize,
     pub hits: u64,
     pub misses: u64,
 }
@@ -2156,11 +2159,27 @@ fn layout_pass(
         }
     }
     // Evict paragraph layouts that weren't used this pass if the cache grew large.
-    // (Not after an incremental pass: it saw only the paragraphs it placed.)
-    if !incremental && ctx.cache.paras.len() > 4 * ctx.cache.used.len().max(1024) {
+    if !incremental {
+        if ctx.cache.paras.len() > 4 * ctx.cache.used.len().max(1024) {
+            let used = std::mem::take(&mut ctx.cache.used);
+            ctx.cache.paras.retain(|k, _| used.contains(k));
+            ctx.cache.used = used;
+        }
+        ctx.cache.kept = ctx.cache.paras.len();
+    } else if ctx.cache.paras.len() > 4 * ctx.cache.kept.max(1024) {
+        // An incremental pass placed only the blocks near the edit; the pages it took from
+        // earlier passes hold their paragraph layouts too. Keep both (the others are the edited
+        // paragraphs' earlier versions), so a long typing session doesn't grow the cache forever.
+        let mut shown = HashSet::new();
+        for p in &pages {
+            para_ptrs(&p.items, &mut shown, 0);
+        }
         let used = std::mem::take(&mut ctx.cache.used);
-        ctx.cache.paras.retain(|k, _| used.contains(k));
+        ctx.cache.paras.retain(|k, v| used.contains(k) || shown.contains(&Arc::as_ptr(v)));
+        let paras = &ctx.cache.paras;
+        ctx.cache.lookahead.retain(|k, _| paras.contains_key(k));
         ctx.cache.used = used;
+        ctx.cache.kept = ctx.cache.paras.len();
     }
     let mut index: HashMap<(StoryRef, Path), Vec<(usize, usize)>> = HashMap::new();
     for (pi, p) in pages.iter().enumerate() {
@@ -2176,6 +2195,19 @@ fn layout_pass(
     }
     lay.text_boxes = ctx.boxes.total().saturating_sub(boxes_discarded);
     Pass::Done(lay)
+}
+
+/// The paragraph layouts `items` show (into `out`), a drawing canvas's members included.
+fn para_ptrs(items: &[Placed], out: &mut HashSet<*const ParaLayout>, depth: usize) {
+    for it in items {
+        match it {
+            Placed::Lines { para, .. } => {
+                out.insert(Arc::as_ptr(para));
+            }
+            Placed::Clip { items, .. } if depth < 8 => para_ptrs(items, out, depth + 1),
+            _ => {}
+        }
+    }
 }
 
 /// Whether a later pass may resume part-way through this document (#554): not when a section's

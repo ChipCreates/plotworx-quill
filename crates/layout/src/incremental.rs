@@ -38,6 +38,7 @@ pub(crate) struct PageState {
     carry: Vec<NoteBox>,
     orig_bottom: f32,
     prev: Option<(String, bool, f32, bool, bool)>,
+    after_break_mark: bool,
     excl: Vec<crate::WrapArea>,
     float_tables: Vec<Rect>,
     line_no: u32,
@@ -72,6 +73,7 @@ impl PageState {
             carry: pb.carry.clone(),
             orig_bottom: pb.orig_bottom,
             prev: pb.prev.clone(),
+            after_break_mark: pb.after_break_mark,
             excl: pb.excl.clone(),
             float_tables: pb.float_tables.clone(),
             line_no: pb.line_no,
@@ -101,6 +103,7 @@ impl PageState {
         pb.carry = self.carry.clone();
         pb.orig_bottom = self.orig_bottom;
         pb.prev = self.prev.clone();
+        pb.after_break_mark = self.after_break_mark;
         pb.excl = self.excl.clone();
         pb.float_tables = self.float_tables.clone();
         pb.line_no = self.line_no;
@@ -133,6 +136,7 @@ impl PageState {
             && f(self.orig_bottom, o.orig_bottom)
             && self.prev.as_ref().map(|(s, c, a, b0, b1)| (s, c, a.to_bits(), b0, b1))
                 == o.prev.as_ref().map(|(s, c, a, b0, b1)| (s, c, a.to_bits(), b0, b1))
+            && self.after_break_mark == o.after_break_mark
             && self.excl == o.excl
             && self.float_tables == o.float_tables
             && self.line_no == o.line_no
@@ -198,13 +202,25 @@ pub(crate) struct Pass {
 }
 
 /// Everything outside the body blocks a pass depends on.
-#[derive(PartialEq)]
 pub(crate) struct PassKey {
     opts: (ViewMode, u32, bool, bool, bool),
     env: u64,
     notes: u64,
     context: u64,
-    parts: Vec<(u32, Vec<usize>)>,
+    /// The blocks of every header, footer, note and text box, held so that none is freed (or
+    /// edited in place) while the pass is kept: an address seen again is the same block.
+    parts: Vec<(u32, Vec<Arc<Block>>)>,
+}
+
+impl PartialEq for PassKey {
+    fn eq(&self, o: &PassKey) -> bool {
+        self.opts == o.opts
+            && self.env == o.env
+            && self.notes == o.notes
+            && self.context == o.context
+            && self.parts.len() == o.parts.len()
+            && self.parts.iter().zip(&o.parts).all(|((a, x), (b, y))| a == b && x.len() == y.len() && x.iter().zip(y).all(|(p, q)| Arc::ptr_eq(p, q)))
+    }
 }
 
 impl PassKey {
@@ -220,8 +236,8 @@ impl PassKey {
         ))
         .map(|s| hash_of(&s))
         .unwrap_or(0);
-        // Part blocks are compared by identity, like the body's (the pass keeps them alive).
-        let parts = doc.parts.iter().map(|(id, p)| (*id, p.blocks.iter().map(|b| Arc::as_ptr(b) as usize).collect())).collect();
+        // Part blocks are compared by identity, like the body's (the key keeps them alive).
+        let parts = doc.parts.iter().map(|(id, p)| (*id, p.blocks.clone())).collect();
         PassKey { opts: (opts.view, opts.web_width.to_bits(), opts.show_hidden, opts.hide_deleted, opts.proofing), env, notes, context, parts }
     }
 }
@@ -304,6 +320,7 @@ impl PageState {
             carry: Vec::new(),
             orig_bottom: 0.0,
             prev: None,
+            after_break_mark: false,
             excl: Vec::new(),
             float_tables: Vec::new(),
             line_no: 0,

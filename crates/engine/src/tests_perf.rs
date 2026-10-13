@@ -121,3 +121,145 @@ fn many_pictures_and_tables_lay_out_without_shaping_them_again() {
     assert_eq!(l.blocks_placed, d2.body.len());
     assert_eq!(cache.misses, misses, "a full pass over the same paragraphs lays none out again");
 }
+
+/// A body paragraph of plain text (no objects) at `i`.
+fn plain(s: &Session, i: usize) -> bool {
+    matches!(s.doc.body.get(i).map(|b| &**b), Some(Block::Para(p)) if p.len() > 40 && p.objects.is_empty() && p.props.numbering.is_none())
+}
+
+#[test]
+fn incremental_layout_keeps_no_space_before_after_a_paragraph_ending_in_a_page_break() {
+    // #1284: a paragraph ending in a page break (its mark stays with the break) leaves the next
+    // paragraph, first on the new page, without its space before. Typing further down that page
+    // resumes from the page's first block, so the flag must come back with it.
+    let mut s = book(40);
+    let pages = s.layout().pages.len();
+    let from = text_para_on(&mut s, pages / 2);
+    let i = (from..s.doc.body.len()).find(|&i| (0..4).all(|k| plain(&s, i + k))).unwrap();
+    caret_in(&mut s, i + 1, 0);
+    s.run("para.spacing", &json!({"before": 48})).unwrap();
+    // No space after on the paragraph with the break (it would push the new page's text down).
+    caret_in(&mut s, i, 0);
+    s.run("para.spacing", &json!({"after": 0})).unwrap();
+    let len = s.doc.body[i].as_para().unwrap().len();
+    caret_in(&mut s, i, len);
+    s.run("text.pageBreak", &json!({})).unwrap();
+    assert_same_as_full(&mut s, "a page break at the end of a paragraph");
+    let lay = s.layout();
+    // The page the break starts counts the paragraph with the break as its first block.
+    let page = lay.pages.iter().rposition(|p| p.first_block == i).expect("the break starts a page");
+    assert!(lay.pages.get(page + 1).is_none_or(|p| p.first_block > i + 3), "the edit is on the same page");
+    let top = lay.pages[page].items.iter().find_map(|it| match it {
+        wordcraft_layout::Placed::Lines { path, y, .. } if *path == Path::top(i + 1) => Some(*y),
+        _ => None,
+    });
+    let first = lay.pages[page - 1].items.iter().find_map(|it| match it {
+        wordcraft_layout::Placed::Lines { story: StoryRef::Body, y, .. } => Some(*y),
+        _ => None,
+    });
+    assert_eq!(top, first, "no space before at the top of the page");
+    caret_in(&mut s, i + 3, 5);
+    for _ in 0..3 {
+        s.run("text.insert", &json!({"text": "x"})).unwrap();
+        assert!(s.layout().blocks_placed < s.doc.body.len(), "laid out incrementally");
+        assert_same_as_full(&mut s, "typing on the page after the break");
+    }
+}
+
+#[test]
+fn a_note_edited_in_place_is_laid_out_again() {
+    // #1284: the pass holds the blocks of headers, notes and text boxes, so a note changed in
+    // place (its block not shared, so not copied) is a different block, not stale pages.
+    let mut s = book(40);
+    let notes: Vec<u32> = s.doc.parts.iter().filter(|(_, p)| p.kind == wordcraft_doc::PartKind::Footnote).map(|(id, _)| *id).collect();
+    let id = notes[notes.len() / 3];
+    for round in 0..2 {
+        let part = s.doc.parts.get_mut(&id).unwrap();
+        let block = part.blocks.first_mut().unwrap();
+        if let Block::Para(p) = std::sync::Arc::make_mut(block) {
+            let at = p.len();
+            p.insert_text(at, &" and a much longer note than before".repeat(8), &Default::default()).unwrap();
+        }
+        s.touch();
+        assert_same_as_full(&mut s, &format!("a note changed in place, round {round}"));
+    }
+}
+
+#[test]
+fn incremental_layout_matches_a_full_layout_after_edits_in_other_stories() {
+    let mut s = book(40);
+    let pages = s.layout().pages.len();
+    let mid = text_para_on(&mut s, pages / 2);
+    let part_of = |s: &Session, kind: wordcraft_doc::PartKind| {
+        let ids: Vec<u32> = s.doc.parts.iter().filter(|(_, p)| p.kind == kind).map(|(id, _)| *id).collect();
+        ids[ids.len() / 2]
+    };
+    let type_in = |s: &mut Session, story: StoryRef, path: Path, text: &str| {
+        let off = s.doc.para(story, &path).map(|p| p.len()).unwrap_or(0);
+        s.sel = Selection::caret(Pos { story, path, off });
+        s.run("text.insert", &json!({"text": text})).unwrap();
+    };
+    // Typing in a footnote: its page's notes grow.
+    let note = part_of(&s, wordcraft_doc::PartKind::Footnote);
+    for _ in 0..3 {
+        type_in(&mut s, StoryRef::Part(note), Path::top(0), " more words in the note");
+        assert_same_as_full(&mut s, "typing in a footnote");
+    }
+    type_in(&mut s, StoryRef::Part(note), Path::top(0), &" a note now several lines long".repeat(10));
+    assert_same_as_full(&mut s, "a long footnote");
+    // Typing in the header: two lines push the body down on every page.
+    let header = part_of(&s, wordcraft_doc::PartKind::Header);
+    type_in(&mut s, StoryRef::Part(header), Path::top(0), &" and a subtitle".repeat(10));
+    assert_same_as_full(&mut s, "typing in the header");
+    // A table cell.
+    let t = (mid..s.doc.body.len()).find(|&i| matches!(s.doc.body.get(i).map(|b| &**b), Some(Block::Table(_)))).unwrap();
+    for text in ["x", &" a cell that grows taller".repeat(12)] {
+        type_in(&mut s, StoryRef::Body, Path(vec![t as u32, 1, 1, 0]), text);
+        assert_same_as_full(&mut s, "typing in a table cell");
+    }
+    // Renumbering a list: the book's lists all continue one numbering, so taking the first item
+    // out renumbers every item after it.
+    let item = (0..s.doc.body.len()).find(|&i| s.doc.body[i].as_para().is_some_and(|p| p.props.numbering.is_some())).unwrap();
+    caret_in(&mut s, item, 0);
+    s.run("para.numbering", &json!({"off": true})).unwrap();
+    assert_same_as_full(&mut s, "renumbering a list");
+    s.run("edit.undo", &json!({})).unwrap();
+    assert_same_as_full(&mut s, "undoing the renumbering");
+    // A text box on a middle page, then typing in it.
+    caret_in(&mut s, mid, 0);
+    s.run("insert.textBox", &json!({"text": "Boxed"})).unwrap();
+    assert_same_as_full(&mut s, "a text box");
+    let tb = part_of(&s, wordcraft_doc::PartKind::TextBox);
+    for text in ["x", &" text that overflows the box".repeat(6)] {
+        type_in(&mut s, StoryRef::Part(tb), Path::top(0), text);
+        assert_same_as_full(&mut s, "typing in a text box");
+    }
+}
+
+#[test]
+fn incremental_layout_matches_a_full_layout_with_section_breaks() {
+    let mut s = book(40);
+    let pages = s.layout().pages.len();
+    // Section breaks a third and two thirds of the way through, the second continuous.
+    for (page, kind) in [(pages / 3, "nextPage"), (2 * pages / 3, "continuous")] {
+        let i = text_para_on(&mut s, page);
+        caret_in(&mut s, i, 0);
+        s.run("layout.break", &json!({"kind": kind})).unwrap();
+        assert_same_as_full(&mut s, &format!("a {kind} section break"));
+    }
+    // Typing in each section, then a change to the middle section's margins.
+    for page in [1, pages / 2, pages - 2] {
+        let i = text_para_on(&mut s, page);
+        caret_in(&mut s, i, 3);
+        for _ in 0..3 {
+            s.run("text.insert", &json!({"text": "typed "})).unwrap();
+            assert_same_as_full(&mut s, &format!("typing on page {} of a sectioned document", page + 1));
+        }
+        s.run("text.insert", &json!({"text": "enough words to add a line ".repeat(6)})).unwrap();
+        assert_same_as_full(&mut s, &format!("adding lines on page {}", page + 1));
+    }
+    let i = text_para_on(&mut s, pages / 2);
+    caret_in(&mut s, i, 0);
+    s.run("layout.margins", &json!({"preset": "narrow"})).unwrap();
+    assert_same_as_full(&mut s, "the middle section's margins");
+}
