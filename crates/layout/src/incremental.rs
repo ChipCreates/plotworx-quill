@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use wordcraft_doc::numbering::Counters;
 use wordcraft_doc::section::NumFormat;
-use wordcraft_doc::section::SectionProps;
+use wordcraft_doc::section::{PageVAlign, SectionProps};
 use wordcraft_doc::{Block, Document};
 use wordcraft_geom::Rect;
 
@@ -51,6 +51,11 @@ pub(crate) struct PageState {
     content_bottom: f32,
     beneath: bool,
     col_break_page: Option<usize>,
+    restart_at: Option<u32>,
+    /// The current page's block marks, items behind its text and vertical alignment.
+    block_marks: Vec<usize>,
+    behind: usize,
+    page_valign: PageVAlign,
 }
 
 fn note_sig(n: &[NoteBox]) -> Vec<(u32, u32, bool, usize)> {
@@ -85,6 +90,10 @@ impl PageState {
             content_bottom: pb.content_bottom,
             beneath: pb.beneath,
             col_break_page: pb.col_break_page,
+            restart_at: pb.restart_at,
+            block_marks: pb.block_marks.clone(),
+            behind: pb.behind.last().copied().unwrap_or(0),
+            page_valign: pb.page_valign,
         }
     }
 
@@ -114,6 +123,12 @@ impl PageState {
         pb.content_bottom = self.content_bottom;
         pb.beneath = self.beneath;
         pb.col_break_page = self.col_break_page;
+        pb.restart_at = self.restart_at;
+        pb.block_marks.clone_from(&self.block_marks);
+        if let Some(b) = pb.behind.last_mut() {
+            *b = self.behind;
+        }
+        pb.page_valign = self.page_valign;
     }
 
     /// Whether placing the same blocks from here gives the same pages.
@@ -145,6 +160,10 @@ impl PageState {
             && f(self.content_bottom, o.content_bottom)
             && self.beneath == o.beneath
             && self.col_break_page == o.col_break_page
+            && self.restart_at == o.restart_at
+            && self.block_marks == o.block_marks
+            && self.behind == o.behind
+            && self.page_valign == o.page_valign
             && format!("{:?}", self.counters) == format!("{:?}", o.counters)
     }
 }
@@ -193,6 +212,8 @@ pub(crate) struct Pass {
     /// The state and pages after the last block (before endnotes, headers and footers).
     pub end: PageState,
     pub end_pages: Vec<Page>,
+    /// Per page of `end_pages`: how many of its items are behind the text.
+    pub end_behind: Vec<usize>,
     /// Whether its body shows page totals (`NUMPAGES`, `SECTIONPAGES`): a later pass can't resume.
     pub uses_totals: bool,
 }
@@ -246,6 +267,7 @@ impl Pass {
             checkpoints: Vec::new(),
             end: PageState::default_for_end(),
             end_pages: Vec::new(),
+            end_behind: Vec::new(),
             uses_totals: false,
         }
     }
@@ -317,6 +339,10 @@ impl PageState {
             content_bottom: 0.0,
             beneath: false,
             col_break_page: None,
+            restart_at: None,
+            block_marks: Vec::new(),
+            behind: 0,
+            page_valign: PageVAlign::default(),
         }
     }
 }
