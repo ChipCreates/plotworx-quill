@@ -3701,7 +3701,6 @@ fn next_first_line(ctx: &mut Ctx, block: usize, width: f32, depth: usize) -> f32
                     grid: ctx.grid,
                     fit_objects: false,
                 };
-                ctx.cache.misses += 1;
                 let pl = para::layout_para(p, &env);
                 // The room this one needs to start on the page with the kept paragraph before
                 // it (#966).
