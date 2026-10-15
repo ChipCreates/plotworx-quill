@@ -53,6 +53,7 @@ pub(crate) struct PageState {
     beneath: bool,
     col_break_page: Option<usize>,
     restart_at: Option<u32>,
+    next_starts_page: bool,
     /// The current page's block marks, items behind its text and vertical alignment.
     block_marks: Vec<usize>,
     behind: usize,
@@ -93,6 +94,7 @@ impl PageState {
             beneath: pb.beneath,
             col_break_page: pb.col_break_page,
             restart_at: pb.restart_at,
+            next_starts_page: pb.next_starts_page,
             block_marks: pb.block_marks.clone(),
             behind: pb.behind.last().copied().unwrap_or(0),
             page_valign: pb.page_valign,
@@ -127,6 +129,7 @@ impl PageState {
         pb.beneath = self.beneath;
         pb.col_break_page = self.col_break_page;
         pb.restart_at = self.restart_at;
+        pb.next_starts_page = self.next_starts_page;
         pb.block_marks.clone_from(&self.block_marks);
         if let Some(b) = pb.behind.last_mut() {
             *b = self.behind;
@@ -165,6 +168,7 @@ impl PageState {
             && self.beneath == o.beneath
             && self.col_break_page == o.col_break_page
             && self.restart_at == o.restart_at
+            && self.next_starts_page == o.next_starts_page
             && self.block_marks == o.block_marks
             && self.behind == o.behind
             && self.page_valign == o.page_valign
@@ -357,6 +361,7 @@ impl PageState {
             beneath: false,
             col_break_page: None,
             restart_at: None,
+            next_starts_page: false,
             block_marks: Vec::new(),
             behind: 0,
             page_valign: PageVAlign::default(),
