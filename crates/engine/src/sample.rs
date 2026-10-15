@@ -273,7 +273,14 @@ pub fn large_document(pages: usize) -> Document {
     let mut toc = Paragraph::new();
     let _ = toc.insert_object(
         0,
-        InlineObject::Field { instr: "TOC \\o \"1-2\" \\h".into(), result: String::new(), locked: false, code: false, form: String::new() },
+        InlineObject::Field {
+            instr: "TOC \\o \"1-2\" \\h".into(),
+            result: String::new(),
+            locked: false,
+            dirty: false,
+            code: false,
+            form: String::new(),
+        },
         &CharProps::default(),
     );
     b.push(Block::Para(toc));
@@ -313,6 +320,7 @@ pub fn large_document(pages: usize) -> Document {
                     instr: "DATE \\@ \"MMMM d, yyyy\"".into(),
                     result: "May 1, 2026".into(),
                     locked: false,
+                    dirty: false,
                     code: false,
                     form: String::new(),
                 },
@@ -379,14 +387,14 @@ pub fn large_document(pages: usize) -> Document {
     let at = f.len();
     let _ = f.insert_object(
         at,
-        InlineObject::Field { instr: "PAGE".into(), result: "1".into(), locked: false, code: false, form: String::new() },
+        InlineObject::Field { instr: "PAGE".into(), result: "1".into(), locked: false, dirty: false, code: false, form: String::new() },
         &CharProps::default(),
     );
     add(&mut f, " of ", CharProps::default());
     let at = f.len();
     let _ = f.insert_object(
         at,
-        InlineObject::Field { instr: "NUMPAGES".into(), result: "1".into(), locked: false, code: false, form: String::new() },
+        InlineObject::Field { instr: "NUMPAGES".into(), result: "1".into(), locked: false, dirty: false, code: false, form: String::new() },
         &CharProps::default(),
     );
     let fid = d.add_part(PartKind::Footer, vec![para_block(f)]);
