@@ -539,6 +539,7 @@ fn assert_same_as_full(d: &Document, cache: &mut LayoutCache, what: &str) -> Doc
     for (i, (x, y)) in pages_dump(&inc).iter().zip(&pages_dump(&full)).enumerate() {
         assert!(x == y, "{what}: page {} differs from a full layout", i + 1);
     }
+    assert_eq!(inc.text_boxes, full.text_boxes, "{what}: text boxes");
     inc
 }
 
@@ -547,21 +548,26 @@ fn a_note_separator_edited_in_place_is_laid_out_again() {
     // #1284: the pass holds the document's note separators too, so a separator changed in
     // place is a different block, not stale pages.
     let mut d = Document::from_text(&"Body text line.\n".repeat(150));
-    for i in [3, 60, 120] {
-        let id = d.add_part(PartKind::Footnote, paras("A footnote", 1));
+    for (i, text) in [(3, "A footnote".to_string()), (60, "A long footnote that runs on and on. ".repeat(100)), (120, "A footnote".into())] {
+        let id = d.add_part(PartKind::Footnote, vec![para_block(Paragraph::with_text(&text, Default::default()))]);
         d.insert_object(&Pos::body(i, 4), InlineObject::NoteRef { kind: NoteKind::Footnote, id, custom: String::new() }, &Default::default())
             .unwrap();
     }
+    let id = d.add_part(PartKind::Endnote, paras("Endnote paragraph", 40));
+    d.insert_object(&Pos::body(140, 4), InlineObject::NoteRef { kind: NoteKind::Endnote, id, custom: String::new() }, &Default::default()).unwrap();
     let sep = |text: &str| {
         let mut p = Paragraph::with_text(text, Default::default());
         p.props.space_after = Some(0.0);
         Some(vec![para_block(p)])
     };
-    d.footnote_separators.separator = sep("Notes");
-    d.footnote_separators.continuation_separator = sep("More notes");
-    d.footnote_separators.continuation_notice = sep("Continued");
+    for seps in [&mut d.footnote_separators, &mut d.endnote_separators] {
+        seps.separator = sep("Notes");
+        seps.continuation_separator = sep("More notes");
+        seps.continuation_notice = sep("Continued");
+    }
     let mut c = LayoutCache::new();
-    assert!(layout(&d, &mut c, &LayoutOptions::default()).pages.len() >= 3);
+    let first = layout(&d, &mut c, &LayoutOptions::default());
+    assert!(first.pages.len() >= 4);
     let edit = |seps: &mut wordcraft_doc::NoteSeparators| {
         for blocks in [&mut seps.separator, &mut seps.continuation_separator, &mut seps.continuation_notice].into_iter().flatten() {
             if let Some(Block::Para(p)) = blocks.first_mut().map(Arc::make_mut) {
@@ -571,29 +577,77 @@ fn a_note_separator_edited_in_place_is_laid_out_again() {
         }
     };
     edit(&mut d.footnote_separators);
-    assert_same_as_full(&d, &mut c, "the footnote separators changed in place");
+    let l = assert_same_as_full(&d, &mut c, "the footnote separators changed in place");
+    assert_ne!(pages_dump(&l), pages_dump(&first), "the edit shows");
     edit(&mut d.endnote_separators);
-    assert_same_as_full(&d, &mut c, "the endnote separators changed in place");
+    let m = assert_same_as_full(&d, &mut c, "the endnote separators changed in place");
+    assert_ne!(pages_dump(&m), pages_dump(&l), "the edit shows");
 }
 
-#[test]
-fn endnotes_after_a_splice_take_the_last_sections_page_geometry() {
-    // #1284: an edit in an earlier section converges there and takes the rest of the pages from
-    // the previous pass; the endnotes after the last block are then placed with the last
-    // section's footer room, as a full layout does, not the edited section's.
+/// Two sections, the first with a ten-line footer and the second with a four-line one (changed
+/// by `last`), and a long endnote at the end. An edit in the first section converges there and
+/// takes the rest of the pages from the previous pass; the endnotes after the last block must
+/// then be placed as a full layout places them, in the last section.
+#[track_caller]
+fn endnotes_after_a_splice(what: &str, last: impl FnOnce(&mut Document, u32, u32)) {
     let mut d = Document::from_text(&"Body text line.\n".repeat(150));
     let tall = d.add_part(PartKind::Footer, paras("Tall footer line", 10));
-    let short = d.add_part(PartKind::Footer, paras("Footer", 1));
+    let short = d.add_part(PartKind::Footer, paras("Footer line", 4));
     let first = SectionProps { footers: wordcraft_doc::section::HeaderSet { default: Some(tall), ..Default::default() }, ..d.last_section.clone() };
     d.para_mut(StoryRef::Body, &Path::top(90)).unwrap().section = Some(Box::new(first));
     d.last_section.footers.default = Some(short);
     let id = d.add_part(PartKind::Endnote, paras("Endnote paragraph", 120));
     d.insert_object(&Pos::body(0, 4), InlineObject::NoteRef { kind: NoteKind::Endnote, id, custom: String::new() }, &Default::default()).unwrap();
+    last(&mut d, short, id);
     let mut c = LayoutCache::new();
     let before = layout(&d, &mut c, &LayoutOptions::default());
-    assert!(before.pages.len() >= 6, "{} pages", before.pages.len());
+    assert!(before.pages.len() >= 6, "{what}: {} pages", before.pages.len());
     // The same text again, a new block: nothing moves, and the walk converges in section 1.
-    d.body[10] = para_block(Paragraph::with_text("Body text line.", Default::default()));
-    let l = assert_same_as_full(&d, &mut c, "an edit in the first section");
-    assert!(l.blocks_placed < 90, "converged in the first section: {} blocks placed", l.blocks_placed);
+    // Twice: the second pass resumes from the first one's spliced end.
+    for round in 0..2 {
+        d.body[10 + round] = para_block(Paragraph::with_text("Body text line.", Default::default()));
+        let l = assert_same_as_full(&d, &mut c, &format!("{what}, edit {round}"));
+        assert!(l.blocks_placed < 90, "{what}: converged in the first section: {} blocks placed", l.blocks_placed);
+    }
+}
+
+#[test]
+fn endnotes_after_a_splice_take_the_last_sections_page_geometry() {
+    // #1284: with the last section's footer room, not the edited section's.
+    endnotes_after_a_splice("footer room", |_, _, _| {});
+    // The footer is measured without the section's line grid, as the section loop measures it.
+    endnotes_after_a_splice("a line grid", |d, _, _| {
+        use wordcraft_doc::section::{DocGrid, DocGridType};
+        d.last_section.doc_grid = Some(DocGrid { kind: DocGridType::Lines, line_pitch: 30.0, char_space: 0 });
+    });
+}
+
+#[test]
+fn endnotes_after_a_splice_number_on_from_where_a_full_layout_does() {
+    // #1284: the last section's footer, numbered and holding a text box, is laid out again for
+    // its room after a splice; that must not count its list items and text box twice.
+    endnotes_after_a_splice("a numbered footer with a text box", |d, footer, note| {
+        let list = d.numbering.add_list(wordcraft_doc::ListKind::Numbered);
+        let num = Some(wordcraft_doc::props::NumRef { num: list, level: 0 });
+        for story in [StoryRef::Part(footer), StoryRef::Part(note)] {
+            let (start, end) = (d.start_of(story), d.end_of(story));
+            d.format_paragraphs(&start, &end, &|p| p.numbering = num).unwrap();
+        }
+        let tb = d.add_part(PartKind::TextBox, paras("Boxed", 1));
+        let shape = InlineObject::Shape {
+            kind: wordcraft_doc::para::ShapeKind::TextBox,
+            w: 60.0,
+            h: 20.0,
+            fill: None,
+            stroke: None,
+            stroke_width: 0.75,
+            float: Default::default(),
+            story: Some(tb),
+            freeform: None,
+            effects: Default::default(),
+            extra: Default::default(),
+        };
+        let at = d.start_of(StoryRef::Part(footer));
+        d.insert_object(&at, shape, &Default::default()).unwrap();
+    });
 }

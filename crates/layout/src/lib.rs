@@ -2358,12 +2358,17 @@ fn layout_pass(
     }
     // The pages after a splice are the previous pass's, to the end of the last section: leave the
     // section state as the section loop leaves it there (the endnotes and note pages after the
-    // last block read it). Resuming is never in reflowed or turned sections.
+    // last block read it). Resuming is never in reflowed or turned sections. The previous pass
+    // already counted the list items, equations and text boxes of the separators and footer
+    // laid out here: their counts stay as it left them.
     if spliced && let Some((_, s)) = sections.get(pb.sect_idx) {
         let si = pb.sect_idx;
+        let (counters, eq_count, boxes) = (ctx.counters.clone(), ctx.eq_count, ctx.boxes.total());
         begin_section(&mut ctx, &mut pb, (si, s), totals);
-        ctx.grid = para::Grid::of(doc, s);
+        // Measured without the grid, as in the section loop.
         pb.foot_top = section_foot_top(&mut ctx, &sections, (si, s));
+        ctx.grid = para::Grid::of(doc, s);
+        (ctx.counters, ctx.eq_count, ctx.boxes) = (counters, eq_count, wordcraft_doc::BoxBudget::counted(boxes));
     }
     if can_resume {
         pass.uses_totals = ctx.uses_totals || (spliced && prev.as_ref().is_some_and(|p| p.uses_totals));
