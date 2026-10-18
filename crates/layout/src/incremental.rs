@@ -235,6 +235,9 @@ pub(crate) struct PassKey {
     /// The blocks of every header, footer, note and text box, held so that none is freed (or
     /// edited in place) while the pass is kept: an address seen again is the same block.
     parts: Vec<(u32, Vec<Arc<Block>>)>,
+    /// The blocks of the document's footnote and endnote separators and continuation notices
+    /// (`None`: the default), held the same way.
+    separators: Vec<Option<Vec<Arc<Block>>>>,
 }
 
 impl PartialEq for PassKey {
@@ -245,6 +248,12 @@ impl PartialEq for PassKey {
             && self.context == o.context
             && self.parts.len() == o.parts.len()
             && self.parts.iter().zip(&o.parts).all(|((a, x), (b, y))| a == b && x.len() == y.len() && x.iter().zip(y).all(|(p, q)| Arc::ptr_eq(p, q)))
+            && self.separators.len() == o.separators.len()
+            && self.separators.iter().zip(&o.separators).all(|(x, y)| match (x, y) {
+                (Some(x), Some(y)) => x.len() == y.len() && x.iter().zip(y).all(|(p, q)| Arc::ptr_eq(p, q)),
+                (None, None) => true,
+                _ => false,
+            })
     }
 }
 
@@ -263,7 +272,20 @@ impl PassKey {
         .unwrap_or(0);
         // Part blocks are compared by identity, like the body's (the key keeps them alive).
         let parts = doc.parts.iter().map(|(id, p)| (*id, p.blocks.clone())).collect();
-        PassKey { opts: (opts.view, opts.web_width.to_bits(), opts.show_hidden, opts.hide_deleted, opts.proofing), env, notes, context, parts }
+        // So are the note separators'.
+        let separators = [&doc.footnote_separators, &doc.endnote_separators]
+            .into_iter()
+            .flat_map(|s| [&s.separator, &s.continuation_separator, &s.continuation_notice])
+            .cloned()
+            .collect();
+        PassKey {
+            opts: (opts.view, opts.web_width.to_bits(), opts.show_hidden, opts.hide_deleted, opts.proofing),
+            env,
+            notes,
+            context,
+            parts,
+            separators,
+        }
     }
 }
 

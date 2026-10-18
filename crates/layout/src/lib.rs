@@ -2222,16 +2222,8 @@ fn layout_pass(
             _ if reflow => sect_ref,
             _ => sect,
         };
-        pb.sect = sect;
-        pb.sect_idx = si;
-        ctx.grid = para::Grid::default();
-        let (foot, end_opts) = (doc.note_options(sect, false), doc.note_options(sect, true));
-        pb.sect_beneath = foot.pos == wordcraft_doc::section::NotePos::BeneathText;
-        if !web && !doc.footnote_separators.is_empty() {
-            pb.seps = NoteSeps::new(&mut ctx, &doc.footnote_separators, sect.text_width());
-        }
-        ctx.fields.section = u32::try_from(si).unwrap_or(u32::MAX).saturating_add(1);
-        ctx.fields.section_pages = totals.section(si);
+        begin_section(&mut ctx, &mut pb, (si, sect), totals);
+        let end_opts = doc.note_options(sect, true);
         // Headers and footers left out are linked to the previous section's, and take its room.
         let (heads, feet) = (linked(&sections, si, |s| s.headers), linked(&sections, si, |s| s.footers));
         let hb = |i: Option<u32>| defining_width(&sections, si, |s| s.headers, i);
@@ -2246,8 +2238,7 @@ fn layout_pass(
         } else {
             with_pct_base(&mut ctx, hb(heads.first), |c| body_top_for(c, sect, heads.first))
         };
-        let foot_top =
-            if reflow || turn.is_turned() { f32::MAX } else { with_pct_base(&mut ctx, fb(feet.default), |c| foot_top_for(c, sect, feet.default)) };
+        let foot_top = if reflow || turn.is_turned() { f32::MAX } else { section_foot_top(&mut ctx, &sections, (si, sect)) };
         let first_foot = if reflow || turn.is_turned() || !sect.title_page {
             foot_top
         } else {
@@ -2365,8 +2356,14 @@ fn layout_pass(
             place_endnotes(&mut ctx, &mut pb, here, block.saturating_sub(1));
         }
     }
+    // The pages after a splice are the previous pass's, to the end of the last section: leave the
+    // section state as the section loop leaves it there (the endnotes and note pages after the
+    // last block read it). Resuming is never in reflowed or turned sections.
     if spliced && let Some((_, s)) = sections.get(pb.sect_idx) {
-        pb.sect = s;
+        let si = pb.sect_idx;
+        begin_section(&mut ctx, &mut pb, (si, s), totals);
+        ctx.grid = para::Grid::of(doc, s);
+        pb.foot_top = section_foot_top(&mut ctx, &sections, (si, s));
     }
     if can_resume {
         pass.uses_totals = ctx.uses_totals || (spliced && prev.as_ref().is_some_and(|p| p.uses_totals));
@@ -2494,6 +2491,27 @@ fn incremental_ok(doc: &Document, sections: &[(usize, &SectionProps)]) -> bool {
         let balanced = sect.columns.count > 1 && sections.get(si + 1).is_some_and(|(_, s)| s.start == SectionStart::Continuous);
         !balanced && doc.note_options(sect, true).pos != wordcraft_doc::section::NotePos::SectEnd
     })
+}
+
+/// Start section `si` (`sect`, as laid out): the builder's and the fields' per-section state.
+fn begin_section<'a>(ctx: &mut Ctx, pb: &mut PageBuilder<'a>, (si, sect): (usize, &'a SectionProps), totals: &Totals) {
+    let doc = ctx.doc;
+    pb.sect = sect;
+    pb.sect_idx = si;
+    ctx.grid = para::Grid::default();
+    pb.sect_beneath = doc.note_options(sect, false).pos == wordcraft_doc::section::NotePos::BeneathText;
+    if !pb.web && !doc.footnote_separators.is_empty() {
+        pb.seps = NoteSeps::new(ctx, &doc.footnote_separators, sect.text_width());
+    }
+    ctx.fields.section = u32::try_from(si).unwrap_or(u32::MAX).saturating_add(1);
+    ctx.fields.section_pages = totals.section(si);
+}
+
+/// The top of section `si`'s default footer (a linked one included) on its pages.
+fn section_foot_top(ctx: &mut Ctx, sections: &[(usize, &SectionProps)], (si, sect): (usize, &SectionProps)) -> f32 {
+    let feet = linked(sections, si, |s| s.footers);
+    let base = defining_width(sections, si, |s| s.footers, feet.default);
+    with_pct_base(ctx, base, |c| foot_top_for(c, sect, feet.default))
 }
 
 /// Place body blocks `*block..=last` of section `si`, recording a checkpoint at the first block

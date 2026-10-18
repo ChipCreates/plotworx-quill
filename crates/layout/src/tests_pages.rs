@@ -524,3 +524,76 @@ fn a_long_typing_session_keeps_the_paragraph_cache_bounded() {
     assert!(most <= 4 * 1024 + 1, "the cache grew to {most} paragraph layouts");
     assert!(c.len() < 4500);
 }
+
+/// The pages as text, for comparing an incremental layout with a full one.
+fn pages_dump(l: &DocLayout) -> Vec<String> {
+    l.pages.iter().map(|p| format!("{:?}|{:?}|{:?}|{:?}|{}|{}", p.items, p.body, p.header, p.footer, p.number, p.first_block)).collect()
+}
+
+/// `cache`'s (incremental) layout of `d` is the one a fresh full layout gives.
+#[track_caller]
+fn assert_same_as_full(d: &Document, cache: &mut LayoutCache, what: &str) -> DocLayout {
+    let inc = layout(d, cache, &LayoutOptions::default());
+    let full = lay(d);
+    assert_eq!(inc.pages.len(), full.pages.len(), "{what}: page count");
+    for (i, (x, y)) in pages_dump(&inc).iter().zip(&pages_dump(&full)).enumerate() {
+        assert!(x == y, "{what}: page {} differs from a full layout", i + 1);
+    }
+    inc
+}
+
+#[test]
+fn a_note_separator_edited_in_place_is_laid_out_again() {
+    // #1284: the pass holds the document's note separators too, so a separator changed in
+    // place is a different block, not stale pages.
+    let mut d = Document::from_text(&"Body text line.\n".repeat(150));
+    for i in [3, 60, 120] {
+        let id = d.add_part(PartKind::Footnote, paras("A footnote", 1));
+        d.insert_object(&Pos::body(i, 4), InlineObject::NoteRef { kind: NoteKind::Footnote, id, custom: String::new() }, &Default::default())
+            .unwrap();
+    }
+    let sep = |text: &str| {
+        let mut p = Paragraph::with_text(text, Default::default());
+        p.props.space_after = Some(0.0);
+        Some(vec![para_block(p)])
+    };
+    d.footnote_separators.separator = sep("Notes");
+    d.footnote_separators.continuation_separator = sep("More notes");
+    d.footnote_separators.continuation_notice = sep("Continued");
+    let mut c = LayoutCache::new();
+    assert!(layout(&d, &mut c, &LayoutOptions::default()).pages.len() >= 3);
+    let edit = |seps: &mut wordcraft_doc::NoteSeparators| {
+        for blocks in [&mut seps.separator, &mut seps.continuation_separator, &mut seps.continuation_notice].into_iter().flatten() {
+            if let Some(Block::Para(p)) = blocks.first_mut().map(Arc::make_mut) {
+                p.props.space_before = Some(p.props.space_before.unwrap_or(0.0) + 30.0);
+                p.touch();
+            }
+        }
+    };
+    edit(&mut d.footnote_separators);
+    assert_same_as_full(&d, &mut c, "the footnote separators changed in place");
+    edit(&mut d.endnote_separators);
+    assert_same_as_full(&d, &mut c, "the endnote separators changed in place");
+}
+
+#[test]
+fn endnotes_after_a_splice_take_the_last_sections_page_geometry() {
+    // #1284: an edit in an earlier section converges there and takes the rest of the pages from
+    // the previous pass; the endnotes after the last block are then placed with the last
+    // section's footer room, as a full layout does, not the edited section's.
+    let mut d = Document::from_text(&"Body text line.\n".repeat(150));
+    let tall = d.add_part(PartKind::Footer, paras("Tall footer line", 10));
+    let short = d.add_part(PartKind::Footer, paras("Footer", 1));
+    let first = SectionProps { footers: wordcraft_doc::section::HeaderSet { default: Some(tall), ..Default::default() }, ..d.last_section.clone() };
+    d.para_mut(StoryRef::Body, &Path::top(90)).unwrap().section = Some(Box::new(first));
+    d.last_section.footers.default = Some(short);
+    let id = d.add_part(PartKind::Endnote, paras("Endnote paragraph", 120));
+    d.insert_object(&Pos::body(0, 4), InlineObject::NoteRef { kind: NoteKind::Endnote, id, custom: String::new() }, &Default::default()).unwrap();
+    let mut c = LayoutCache::new();
+    let before = layout(&d, &mut c, &LayoutOptions::default());
+    assert!(before.pages.len() >= 6, "{} pages", before.pages.len());
+    // The same text again, a new block: nothing moves, and the walk converges in section 1.
+    d.body[10] = para_block(Paragraph::with_text("Body text line.", Default::default()));
+    let l = assert_same_as_full(&d, &mut c, "an edit in the first section");
+    assert!(l.blocks_placed < 90, "converged in the first section: {} blocks placed", l.blocks_placed);
+}
