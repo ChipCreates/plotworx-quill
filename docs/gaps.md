@@ -1,6 +1,6 @@
 # Where WordCraft falls short of Word
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-18 · **Change:** trivial (RTF export writes sections (gap 19); previously trivial: ODT export writes sections (gap 19); previously trivial: automatic Asian/Latin and Asian/number spacing laid out, #2358; previously trivial: hint-reliant CJK outlines; previously trivial: numbered headings, #1793; previously trivial: legacy outline, shadow, emboss and imprint text effects drawn, #2534; previously trivial: #8 narrowed: Indonesian proofing from the installed Hunspell dictionary, #498; previously trivial: glossary/building blocks closed; previously trivial: Split Cells and Convert Text to Table follow the Word check, #2592; previously trivial: Language dialog keeps inherited proofing language and no-proof choices (#2717); previously trivial: #29: a copied equation also goes in the MathML clipboard formats, #1297; previously trivial: #24: the Spike, Ctrl+F3 and Ctrl+Shift+F3; previously trivial: VML freeforms read and kept on save; previously trivial: consistent preferred cell widths; previously trivial: multi-paragraph field instructions no longer add blank lines; previously trivial: page-break-only list paragraphs hide their labels; previously trivial: floating-table overlap ignores empty line-break lines; previously trivial: copies keep their formatting on the clipboard as HTML, #1523; previously trivial: sample-text formulas on Enter, #1067; previously trivial: #29: copied equations as MathML, OMML open as #1297, #816; previously trivial: the Font list no longer keeps every previewed font in memory, #848; previously trivial: table column and row markers on the rulers, #700; previously trivial: table borders and the resize handle drag on the page, #217; previously trivial: formatting revisions landed, #41; previously trivial: Draw Table and Eraser landed, #303; previously minor: beta distance restated: ~15 points, ~150–230 h; previously: first version; every known shortfall from the 2026-10-10 re-measure, ranked) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-18 · **Change:** trivial (opening a DOCX no longer copies its pictures; previously trivial: RTF export writes sections (gap 19); previously trivial: ODT export writes sections (gap 19); previously trivial: automatic Asian/Latin and Asian/number spacing laid out, #2358; previously trivial: hint-reliant CJK outlines; previously trivial: numbered headings, #1793; previously trivial: legacy outline, shadow, emboss and imprint text effects drawn, #2534; previously trivial: #8 narrowed: Indonesian proofing from the installed Hunspell dictionary, #498; previously trivial: glossary/building blocks closed; previously trivial: Split Cells and Convert Text to Table follow the Word check, #2592; previously trivial: Language dialog keeps inherited proofing language and no-proof choices (#2717); previously trivial: #29: a copied equation also goes in the MathML clipboard formats, #1297; previously trivial: #24: the Spike, Ctrl+F3 and Ctrl+Shift+F3; previously trivial: VML freeforms read and kept on save; previously trivial: consistent preferred cell widths; previously trivial: multi-paragraph field instructions no longer add blank lines; previously trivial: page-break-only list paragraphs hide their labels; previously trivial: floating-table overlap ignores empty line-break lines; previously trivial: copies keep their formatting on the clipboard as HTML, #1523; previously trivial: sample-text formulas on Enter, #1067; previously trivial: #29: copied equations as MathML, OMML open as #1297, #816; previously trivial: the Font list no longer keeps every previewed font in memory, #848; previously trivial: table column and row markers on the rulers, #700; previously trivial: table borders and the resize handle drag on the page, #217; previously trivial: formatting revisions landed, #41; previously trivial: Draw Table and Eraser landed, #303; previously minor: beta distance restated: ~15 points, ~150–230 h; previously: first version; every known shortfall from the 2026-10-10 re-measure, ranked) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 > **Printing update:** 2026-10-12 · direct desktop printing through craft-print; details below.
 
@@ -19,6 +19,12 @@ Local desktop recovery now covers unsaved drafts and edits to existing files; se
 establish cross-platform reliability.
 
 Document renaming: desktop renaming requires a filesystem that supports hard links (exFAT/FAT drives and some network shares refuse it). Behaviour: [UI parity](ui-parity.md).
+
+Additive paragraph spacing retains the full before-space after a section page break; ordinary overlapping spacing is unchanged. Other pagination gaps remain open.
+
+Exact line spacing keeps the run font baseline around tall equations; automatic and minimum spacing still grow for math. Other pagination gaps remain open.
+
+Legacy Word imports (#2445): interactive Save for `.doc`/`.dot` uses the existing DOCX Save As dialog. Cancel and write failures retain the draft and original path; Save before Close continues only after a successful supported-format save. This narrows save reliability under gap #3; binary `.doc` writing remains unsupported. Late Save As answers are rejected before writing if automation has replaced the document.
 
 ## Ranked
 
@@ -90,6 +96,8 @@ The Language dialog reads effective character formatting, including document def
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-18 | trivial | #2445: pending Save As answers keep their originating document identity, so a replacement document is never written to an old picker destination; real Save-button and focused-editor shortcut controls verified |
+| 2026-10-16 | trivial | #2445: interactive Save on import-only .doc/.dot paths uses the existing DOCX Save As flow; cancel and failed writes keep the draft, and Close waits for a successful save. Explicit/script saves still report unsupported legacy output |
 | 2026-10-16 | trivial | #24: the Spike (Ctrl+F3, Ctrl+Shift+F3) |
 | 2026-10-17 | trivial | Glossary/building blocks closed (DOCX glossary read, kept and written); `w:altChunk` and sub-documents remain |
 | 2026-10-15 | trivial | #5 narrowed: Track Changes Options › Moves (Moved from / Moved to marks and colours) and Track moves (`w:doNotTrackMoves`) landed; drag-and-drop moves remain |
@@ -107,9 +115,13 @@ The Language dialog reads effective character formatting, including document def
 | 2026-10-16 | trivial | #17: automatic space between Asian text and Latin text or digits laid out (#2358) |
 | 2026-10-14 | trivial | Gap 19: RTF export writes sections (ODT export landed too) |
 | 2026-10-14 | trivial | #19 narrowed: ODT export done (master page and page layout per section, columned `text:section`s) |
+| 2026-10-15 | trivial | Additive paragraph spacing retains the full before-space after a section page break; ordinary overlapping spacing is unchanged. |
+| 2026-10-15 | trivial | Exact line spacing keeps the run font baseline around tall equations; automatic and minimum spacing still grow for math. |
+| 2026-10-16 | trivial | Zero-extent drawing anchors contribute no inline font height. Synthetic regressions. |
 | 2026-10-14 | trivial | Row table border exceptions fixed; other row table exceptions remain unsupported |
 | 2026-10-12 | minor | Czech proofing review: short-word splits rank after deletion, NOSUGGEST excludes suggestions while accepting typed forms, affix comments apply only to headers, ratios keep spaces and repeated-word messages use Czech quotes; synthetic engine end-to-end and latency checks |
 | 2026-10-12 | minor | Czech spelling from the installed Hunspell dictionary, runtime-table suggestions and generic checks; Czech interface writes cs-CZ documents; no Czech hyphenation patterns bundled; estimates unchanged |
+| 2026-10-16 | trivial | Gap #20: opening a DOCX no longer copies its pictures |
 | 2026-10-12 | minor | Gap #24 default shortcuts expanded (140 commands on macOS / 158 on Linux/Windows); stale gaps #9 (DOCX agile encryption already works, only encrypted .doc missing) and #15 (DOCX bibliography sources already saved, only desktop integrations missing) updated |
 | 2026-10-13 | trivial | Previously untracked long Web/Draft page blur resolved with visible high-resolution raster tiling; no gap remains for this issue |
 | 2026-10-14 | trivial | #1: VML freeforms (rule lines in headers) read and kept on save |
