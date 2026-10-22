@@ -4233,41 +4233,32 @@ fn space_after_kept(ctx: &Ctx, block: usize, rp: &wordcraft_doc::resolve::Resolv
 /// kept with the next too (a chain moves together in Word). Word carries a kept heading over
 /// when the paragraph after it cannot start on the page (#966).
 fn next_first_line(ctx: &mut Ctx, block: usize, width: f32, depth: usize, counters: &mut Counters) -> f32 {
-    let doc = ctx.doc;
-    match doc.body.get(block + 1).map(|b| &**b) {
+    match ctx.doc.body.get(block + 1).map(|b| &**b) {
         Some(Block::Para(p)) => {
             // Keep list indents and label metrics without consuming the document counters.
             let rp = ctx.doc.styles.resolve_para(&p.props);
             let label =
                 p.props.numbering.or(rp.numbering).filter(|n| n.num != 0).and_then(|n| counters.next_label(&ctx.doc.numbering, n.num, n.level));
-            let pl: Arc<ParaLayout> = if p.objects.is_empty() {
-                // Plotworx patch 2 (see PATCHES.md): a paragraph with no inline objects (the usual prose paragraph) is laid
-                // out through the paragraph cache instead of from scratch on every pass. With no objects there is no equation
-                // to number (`para_key` advances `eq_count` only for equations), no inline text box to fit and nothing else
-                // the plain lookahead environment below leaves out, so the result is the same layout.
-                ctx.para_labelled(p, width, None, &[], label)
-            } else {
-                let env = para::ParaEnv {
-                    doc,
-                    width,
-                    label,
-                    fields: &ctx.fields,
-                    show_hidden: ctx.opts.show_hidden,
-                    field_codes: ctx.opts.field_codes,
-                    hide_deleted: ctx.opts.hides_deleted(StoryRef::Body),
-                    table: None,
-                    proofing: None,
-                    typing_word: None,
-                    numeral: ctx.opts.numeral,
-                    exclusions: &[],
-                    eq_number: ctx.eq_count,
-                    read_line_spacing: if ctx.opts.view == ViewMode::Read { ctx.opts.read_line_spacing } else { None },
-                    grid: ctx.grid,
-                    fit_objects: false,
-                    fitted: &[],
-                };
-                Arc::new(para::layout_para(p, &env))
+            let env = para::ParaEnv {
+                doc: ctx.doc,
+                width,
+                label,
+                fields: &ctx.fields,
+                show_hidden: ctx.opts.show_hidden,
+                field_codes: ctx.opts.field_codes,
+                hide_deleted: ctx.opts.hides_deleted(StoryRef::Body),
+                table: None,
+                proofing: None,
+                typing_word: None,
+                numeral: ctx.opts.numeral,
+                exclusions: &[],
+                eq_number: ctx.eq_count,
+                read_line_spacing: if ctx.opts.view == ViewMode::Read { ctx.opts.read_line_spacing } else { None },
+                grid: ctx.grid,
+                fit_objects: false,
+                fitted: &[],
             };
+            let pl = para::layout_para(p, &env);
             // Its border room, unless it joins the paragraph before (or after) in one box.
             let own = Edges::own(&pl, 0, pl.lines.len());
             let top = if joined(ctx.doc, &ctx.doc.body, block + 1, Some(block), None) { 0.0 } else { own.top };
