@@ -228,7 +228,8 @@ pub(crate) struct Pass {
 
 /// Everything outside the body blocks a pass depends on.
 pub(crate) struct PassKey {
-    opts: (ViewMode, u32, bool, bool, bool),
+    view: ViewMode,
+    opts: u64,
     env: u64,
     notes: u64,
     context: u64,
@@ -242,7 +243,8 @@ pub(crate) struct PassKey {
 
 impl PartialEq for PassKey {
     fn eq(&self, o: &PassKey) -> bool {
-        self.opts == o.opts
+        self.view == o.view
+            && self.opts == o.opts
             && self.env == o.env
             && self.notes == o.notes
             && self.context == o.context
@@ -278,14 +280,7 @@ impl PassKey {
             .flat_map(|s| [&s.separator, &s.continuation_separator, &s.continuation_notice])
             .cloned()
             .collect();
-        PassKey {
-            opts: (opts.view, opts.web_width.to_bits(), opts.show_hidden, opts.hide_deleted, opts.proofing),
-            env,
-            notes,
-            context,
-            parts,
-            separators,
-        }
+        PassKey { view: opts.view, opts: hash_of(&format!("{opts:?}")), env, notes, context, parts, separators }
     }
 }
 
@@ -316,7 +311,7 @@ impl Pass {
 
     /// How to lay out `doc` reusing this pass, or `None` for a full layout.
     pub fn plan(&self, key: &PassKey, doc: &Document, sections: &[(usize, &SectionProps)]) -> Option<Plan> {
-        if *key != self.key || key.opts.0 != ViewMode::Print {
+        if *key != self.key || key.view != ViewMode::Print {
             return None;
         }
         let same = |a: &Arc<Block>, b: &Arc<Block>| Arc::ptr_eq(a, b);
