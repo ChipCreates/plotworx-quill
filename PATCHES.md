@@ -61,4 +61,6 @@ Patch 1 (Android fonts): compiles on the host; not yet verified on the tablet th
 
 ## Pending (known, not yet carried)
 
-None at present.
+| Candidate | Owner decision | Status |
+|---|---|---|
+| **Task-item checkbox** for Plotworx list items (`- [ ]` / `- [x]` round trip, click to toggle) | 2026-10-22: add a checkbox of our own, patching WordCraft only if needed | Not started. WordCraft already has a checkbox *content control* (`ControlKind::CheckBox` in `crates/doc/src/control.rs`; commands `developer.checkBox`, `developer.toggleCheckBox`). Plotworx plan task E4.1-5 evaluates it as the carrier first (insert at the start of a list item; Enter, Backspace, undo, toggle, round trip). Only if that fails: search upstream issues and pull requests (open and closed) before writing a patch, record numbers and links here, keep it one small commit with a `Patch:` line, and offer nothing upstream without the owner's review. |
