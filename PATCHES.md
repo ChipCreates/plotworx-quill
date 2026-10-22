@@ -42,7 +42,9 @@ Carried PR #1292 at tip `670f4425` on upstream `8e986366`, evaluated 2026-10-22 
 - **Output equivalence:** the Plotworx `fp` tool hashes every placed page item of nine documents before and after eight edits: all nine identical to unpatched `main`. Its `--selfcheck` compares the live (incremental) layout with a from-scratch layout after every edit: **0 differences** across generated manuscripts (headings, numbered lists), WordCraft's own samples and the **page-break scenario from issue #1284** (80 edits). PR #675 alone fails that scenario (80 of 80 differ).
 - **WordCraft's own tests:** layout 492 pass / 2 fail (two Thai-font tests that need fonts the test machine lacks; the same two fail on `main`, which has 487 / 2); engine 883 pass / 0 fail (`main`: 876 / 0).
 - **Speed** (offscreen key-to-GPU-complete, RTX A5000, 111k-word document): typing median 3.7-3.9 ms, p95 4.0-4.7 ms (previously 13.4-15.9 ms and 15.7-18.4 ms); Enter with headings p95 about 10 ms.
-- **Not covered:** stale header, footer, footnote and text-box pages; table cells; section breaks; cache growth over a long session; Enter and Backspace-join are not incremental; documents with equations, floats or columns; the Read view.
+- **Stale pages and structure (2026-10-22, Plotworx `fp --stale`):** strict comparison of the live layout with a from-scratch layout after each of 750 edits in five documents (books with tables, footnotes, floats, TOC, PAGE/NUMPAGES footer; samples), edits in body, table cells, footnotes, headers, footers and text boxes with section breaks, page breaks and text boxes inserted: **0 differences**. Positive control: #675 alone differs after 21 of 750. Long session (5,000 edits): memory levels off.
+- **Known limit:** per-edit layout cost grows with page count in documents with tables, pictures and page-number footers (200-page synthetic book 14 ms median; upstream `main` 19 ms); logged as Plotworx runtime D-026.
+- **Not covered:** equations, columns; Enter and Backspace-join are not incremental; the Read view.
 
 Patch 1 (Android fonts): compiles on the host; not yet verified on the tablet through the patched crate.
 
