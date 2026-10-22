@@ -58,6 +58,8 @@ pub(crate) struct PageState {
     block_marks: Vec<usize>,
     behind: usize,
     page_valign: PageVAlign,
+    /// Where the paragraph before ended (page, column, y): a bordered group draws up to it.
+    para_end: Option<(usize, usize, f32)>,
 }
 
 fn note_sig(n: &[NoteBox]) -> Vec<(u32, u32, bool, usize)> {
@@ -98,6 +100,7 @@ impl PageState {
             block_marks: pb.block_marks.clone(),
             behind: pb.behind.last().copied().unwrap_or(0),
             page_valign: pb.page_valign,
+            para_end: pb.para_end,
         }
     }
 
@@ -135,6 +138,7 @@ impl PageState {
             *b = self.behind;
         }
         pb.page_valign = self.page_valign;
+        pb.para_end = self.para_end;
     }
 
     /// Whether placing the same blocks from here gives the same pages.
@@ -172,6 +176,7 @@ impl PageState {
             && self.block_marks == o.block_marks
             && self.behind == o.behind
             && self.page_valign == o.page_valign
+            && self.para_end.map(|(p, c, y)| (p, c, y.to_bits())) == o.para_end.map(|(p, c, y)| (p, c, y.to_bits()))
             && format!("{:?}", self.counters) == format!("{:?}", o.counters)
     }
 }
@@ -230,6 +235,9 @@ pub(crate) struct Pass {
 pub(crate) struct PassKey {
     view: ViewMode,
     opts: u64,
+    /// The word being typed: not part of `opts` (it changes with every key); [`Pass::plan`]
+    /// lays its paragraph out again.
+    typing: Option<crate::TypingWord>,
     env: u64,
     notes: u64,
     context: u64,
@@ -280,7 +288,16 @@ impl PassKey {
             .flat_map(|s| [&s.separator, &s.continuation_separator, &s.continuation_notice])
             .cloned()
             .collect();
-        PassKey { view: opts.view, opts: hash_of(&format!("{opts:?}")), env, notes, context, parts, separators }
+        PassKey {
+            view: opts.view,
+            opts: hash_of(&format!("{:?}", LayoutOptions { typing_word: None, ..opts.clone() })),
+            typing: opts.typing_word,
+            env,
+            notes,
+            context,
+            parts,
+            separators,
+        }
     }
 }
 
@@ -315,7 +332,18 @@ impl Pass {
             return None;
         }
         let same = |a: &Arc<Block>, b: &Arc<Block>| Arc::ptr_eq(a, b);
-        let first_diff = self.body.iter().zip(doc.body.iter()).position(|(a, b)| !same(a, b)).unwrap_or(self.body.len().min(doc.body.len()));
+        let mut first_diff = self.body.iter().zip(doc.body.iter()).position(|(a, b)| !same(a, b)).unwrap_or(self.body.len().min(doc.body.len()));
+        let mut dirty_to = 0;
+        if key.typing != self.key.typing {
+            // The paragraphs with the word being typed, before and after, are laid out again
+            // (their squiggles differ). One that isn't a top-level paragraph: a full layout.
+            for (typing, body) in [(self.key.typing, &self.body), (key.typing, &doc.body)] {
+                let Some(t) = typing else { continue };
+                let at = body.iter().position(|b| matches!(&**b, Block::Para(p) if p.rev == t.rev))?;
+                first_diff = first_diff.min(at);
+                dirty_to = dirty_to.max(at + 1);
+            }
+        }
         // The last checkpoint strictly before the first changed block (the block before it may
         // keep with it, so it is placed again), whose section still has the same settings.
         let sect_same = |i: usize, si: usize| match (sections.get(i), self.sections.get(i)) {
@@ -335,7 +363,7 @@ impl Pass {
         let converge_after = (doc.body.len() == self.body.len() && all_sections).then(|| {
             // The first block of the unchanged tail.
             let tail = self.body.iter().rev().zip(doc.body.iter().rev()).take_while(|(a, b)| same(a, b)).count();
-            doc.body.len() - tail
+            (doc.body.len() - tail).max(dirty_to)
         });
         Some(Plan { from: cp.cloned(), pages, converge_after })
     }
@@ -382,6 +410,7 @@ impl PageState {
             block_marks: Vec::new(),
             behind: 0,
             page_valign: PageVAlign::default(),
+            para_end: None,
         }
     }
 }

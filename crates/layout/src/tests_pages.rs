@@ -716,3 +716,24 @@ fn a_roman_page_number_in_the_footer_stays_roman_with_the_page_count_in_the_body
         assert_eq!(glyphs, want.chars().count(), "page {}: the footer should show {want}", p.number);
     }
 }
+
+#[test]
+fn a_bordered_group_split_by_a_page_break_resumes_like_a_full_layout() {
+    // #1284 (review): the paragraph before a checkpoint ends on its page; the border of the one
+    // after it that joins it draws up to that end, resumed or not.
+    use wordcraft_doc::props::{Border, Borders};
+    let mut d = Document::from_text(&"Boxed text that runs over a few lines of the page, again and again. ".repeat(30).replace(". ", ".\n"));
+    let n = d.body.len();
+    for i in 0..n {
+        if let Ok(p) = d.para_mut(StoryRef::Body, &Path::top(i)) {
+            p.props.borders = Some(Borders::all(Border::single(1.0)));
+        }
+    }
+    let mut c = LayoutCache::new();
+    let first = assert_same_as_full(&d, &mut c, "first layout");
+    assert!(first.pages.len() >= 2);
+    for at in [n - 2, n / 2, n / 3, 1] {
+        d.insert_text(&Pos::body(at, 0), "Edit ", &Default::default()).unwrap();
+        assert_same_as_full(&d, &mut c, &format!("edit in paragraph {at}"));
+    }
+}

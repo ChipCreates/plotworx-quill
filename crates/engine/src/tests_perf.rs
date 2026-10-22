@@ -55,7 +55,7 @@ fn typing_in_a_long_document_relays_out_only_near_the_edit() {
     for page in [0, pages / 2, pages - 1] {
         let i = text_para_on(&mut s, page);
         caret_in(&mut s, i, 10);
-        for _ in 0..3 {
+        for key in 0..3 {
             s.run("text.insert", &json!({"text": "x"})).unwrap();
             let (_, misses) = s.layout_cache_stats();
             let l = s.layout();
@@ -63,7 +63,9 @@ fn typing_in_a_long_document_relays_out_only_near_the_edit() {
             // next pages until they come out as before.
             let laid = s.layout_cache_stats().1 - misses;
             assert!((1..=2).contains(&laid), "page {page}: {laid} paragraphs laid out");
-            assert!(l.blocks_placed * 10 < blocks, "page {page}: {} of {blocks} blocks placed", l.blocks_placed);
+            // The first key after the caret moved also lays out the paragraph the word was being
+            // typed in before (its squiggles change): from there on.
+            assert!(key == 0 || l.blocks_placed * 10 < blocks, "page {page}: {} of {blocks} blocks placed", l.blocks_placed);
         }
         assert_same_as_full(&mut s, &format!("typing on page {}", page + 1));
     }
@@ -159,9 +161,10 @@ fn incremental_layout_keeps_no_space_before_after_a_paragraph_ending_in_a_page_b
     });
     assert_eq!(top, first, "no space before at the top of the page");
     caret_in(&mut s, i + 3, 5);
-    for _ in 0..3 {
+    for key in 0..3 {
         s.run("text.insert", &json!({"text": "x"})).unwrap();
-        assert!(s.layout().blocks_placed < s.doc.body.len(), "laid out incrementally");
+        // (The first key also lays out the paragraph the word was being typed in before.)
+        assert!(key == 0 || s.layout().blocks_placed < s.doc.body.len(), "laid out incrementally");
         assert_same_as_full(&mut s, "typing on the page after the break");
     }
 }
