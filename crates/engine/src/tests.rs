@@ -9213,3 +9213,35 @@ fn table_cell_margins_preserves_unpassed_sides() {
     let margins = s.doc.table(StoryRef::Body, &tp).unwrap().props.cell_margins.unwrap();
     assert_eq!(margins, [0.0, 10.0, 0.0, 15.0]);
 }
+
+/// Composition: with the preference on, the export layout breaks lines optimally (Knuth-Plass); the live layout never does.
+#[test]
+fn optimal_line_breaks_apply_to_the_export_layout_only() {
+    let text = "The Queen had not moved. Mayne had stopped writing, and for a long moment nobody in the Throne Room said anything at all, because the history of \
+Callowen had been written five times and every one of those histories had been wrong in a way that only a person who loved the place could see. "
+        .repeat(4);
+    let line_starts = |l: &wordcraft_layout::DocLayout| -> Vec<usize> {
+        l.pages
+            .iter()
+            .flat_map(|p| p.items.iter())
+            .filter_map(|it| match it {
+                wordcraft_layout::Placed::Lines { para, l0, l1, .. } => Some(para.lines[*l0..*l1].iter().map(|x| x.start).collect::<Vec<_>>()),
+                _ => None,
+            })
+            .flatten()
+            .collect()
+    };
+    let mut s = Session::new(wordcraft_doc::Document::from_text(&text));
+    s.doc.settings.compat_mode = 15;
+    s.doc
+        .format_paragraphs(&wordcraft_doc::Pos::body(0, 0), &wordcraft_doc::Pos::body(0, 0), &|p| p.align = Some(wordcraft_doc::props::Align::Left))
+        .unwrap();
+    let greedy_export = line_starts(&s.export_layout());
+    let live_before = line_starts(&s.layout());
+    s.prefs.optimal_line_breaks = true;
+    let optimal_export = line_starts(&s.export_layout());
+    s.relayout();
+    let live_after = line_starts(&s.layout());
+    assert_ne!(greedy_export, optimal_export, "the export layout takes the preference");
+    assert_eq!(live_before, live_after, "the live layout is greedy whatever the preference");
+}

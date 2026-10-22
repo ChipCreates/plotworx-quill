@@ -16,6 +16,7 @@ pub mod hit;
 mod incremental;
 pub mod kinsoku;
 pub mod math;
+mod optimal;
 pub mod outline;
 pub mod para;
 pub mod styleref;
@@ -180,6 +181,9 @@ pub struct LayoutOptions {
     pub filename: Option<Arc<str>>,
     /// Document full path for FILENAME \p fields ([`FieldCtx::filepath`]).
     pub filepath: Option<Arc<str>>,
+    /// Composition: break lines optimally (Knuth-Plass, [`crate`]'s `optimal` module) instead of greedily, for the paragraphs it handles. Meant for
+    /// print, export and preview; slower than greedy, so the live editing layout leaves it off.
+    pub optimal_breaks: bool,
 }
 
 /// The word being typed ([`LayoutOptions::typing_word`]): the paragraph by its revision
@@ -534,6 +538,8 @@ struct Key {
     sref: u64,
     /// The word being typed in this paragraph, left without a spelling squiggle.
     typing: Option<(usize, usize)>,
+    /// Optimal line breaking ([`LayoutOptions::optimal_breaks`]).
+    optimal: bool,
 }
 
 /// Memoised paragraph layouts.
@@ -856,6 +862,7 @@ impl Ctx<'_> {
             grid: para::Grid::default(),
             fit_objects: false,
             fitted: &[],
+            optimal: false,
         };
         let pl = Arc::new(para::layout_para(&p, &env));
         self.numbers.insert(n, pl.clone());
@@ -994,6 +1001,7 @@ impl Ctx<'_> {
             hide_deleted: self.hide_deleted,
             sref: if self.fields.styleref.is_some() && styleref::has_styleref(p) { self.fields.styleref_key(p) } else { 0 },
             typing: self.opts.typing_word.filter(|t| t.rev == p.rev).map(|t| (t.start, t.end)),
+            optimal: self.opts.optimal_breaks,
         };
         (key, eq_number)
     }
@@ -1041,6 +1049,7 @@ impl Ctx<'_> {
             grid: self.grid,
             fit_objects: self.boxes.inside(),
             fitted,
+            optimal: self.opts.optimal_breaks,
         }
     }
 }
@@ -4469,6 +4478,7 @@ fn next_first_line(ctx: &mut Ctx, block: usize, width: f32, depth: usize, counte
                     grid: ctx.grid,
                     fit_objects: false,
                     fitted: &[],
+                    optimal: ctx.opts.optimal_breaks,
                 };
                 let pl = para::layout_para(p, &env);
                 let own = Edges::own(&pl, 0, pl.lines.len());
@@ -5131,6 +5141,8 @@ mod tests_grid;
 mod tests_ligature;
 #[cfg(test)]
 mod tests_numeral;
+#[cfg(test)]
+mod tests_optimal;
 #[cfg(test)]
 mod tests_pages;
 #[cfg(test)]

@@ -576,6 +576,9 @@ pub struct Prefs {
     /// in Word). A damaged saved value reads as the defaults.
     #[serde(deserialize_with = "crate::cmd::tools::lenient_autocorrect")]
     pub autocorrect: crate::cmd::tools::AutoCorrectPrefs,
+    /// Composition (PDF, print and page-image export): break lines optimally (Knuth-Plass) instead of greedily, for the paragraphs the optimal
+    /// breaker handles ([`wordcraft_layout::LayoutOptions::optimal_breaks`]). Off by default; the live page is always laid out greedily.
+    pub optimal_line_breaks: bool,
 }
 
 impl Default for Prefs {
@@ -600,6 +603,7 @@ impl Default for Prefs {
             detect_language: true,
             default_language: None,
             autocorrect: Default::default(),
+            optimal_line_breaks: false,
         }
     }
 }
@@ -908,6 +912,8 @@ impl Session {
             typing_word: typing,
             filename: filename.clone(),
             filepath: filepath.clone(),
+            // The live layout is greedy; composition (print, export, preview) sets the option on its own `LayoutOptions`.
+            optimal_breaks: false,
         };
         let l = Arc::new(wordcraft_layout::layout(&self.doc, &mut self.cache, &opts));
         self.layout = Some((self.rev, width, height, mode, spacing, l.clone(), self.view.proofing, outline, deleted, self.view.numeral, typing));
@@ -964,6 +970,7 @@ impl Session {
             comment_balloons: markup && self.prefs.markup.comments,
             filename: Some(Arc::from(fn_name.as_str())),
             filepath: Some(Arc::from(fn_path.as_str())),
+            optimal_breaks: self.prefs.optimal_line_breaks,
             ..Default::default()
         };
         Arc::new(wordcraft_layout::layout(&self.doc, &mut LayoutCache::new(), &opts))

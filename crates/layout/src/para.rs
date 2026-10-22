@@ -453,6 +453,8 @@ pub struct ParaEnv<'a> {
     /// Heights of the paragraph's inline text boxes that resize to fit their text, by object
     /// index: they take these instead of their saved heights.
     pub fitted: &'a [(usize, f32)],
+    /// Break lines optimally where [`crate::optimal::plan`] can ([`crate::LayoutOptions::optimal_breaks`]).
+    pub optimal: bool,
 }
 
 /// The section's document grid as layout applies it (`w:docGrid`, ECMA-376 §17.6.5).
@@ -2034,6 +2036,23 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
     let mut first_x0: Option<f32> = None;
     let mut hcache: Vec<(u32, u32, f32)> = Vec::new();
     let mut lines: Vec<Line> = Vec::new();
+    // Composition: choose the breaks of the whole paragraph optimally (Knuth-Plass) where the planner handles it; `None` leaves greedy breaking.
+    let planned: Option<Vec<usize>> = if env.optimal && exclusions.is_empty() && grid.is_none() && !bidi && pl.label.is_none() {
+        let hyphen_w: Vec<f32> = (0..pl.styles.len()).map(|s| hyphen_glyph(pl, s as u32, &mut hcache).2).collect();
+        let hyphen_width = |style: u32| hyphen_w.get(style as usize).copied().unwrap_or(0.0);
+        crate::optimal::plan(
+            pl,
+            &crate::optimal::Lines {
+                first_width: base_right - first_left,
+                body_width: base_right - rp.indent_left,
+                justified: rp.align == Align::Justify,
+                max_shrink: if shrink_spaces { MAX_SPACE_SHRINK } else { 0.0 },
+                hyphen_width: &hyphen_width,
+            },
+        )
+    } else {
+        None
+    };
     // The label is drawn on line 0 or, after an opening page break, line 1. Apply that
     // line's alignment once both lines are known, before mirroring right-to-left labels.
     let mut label_shifts = [0.0; 2];
@@ -2129,7 +2148,9 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
         let mut pending_tab: Option<(usize, TabStop, f32)> = None; // tab cluster, stop, x where tab started
         let mut space_w = 0.0f32; // width of the spaces so far on this line
         let mut has_tab = false;
-        while j < n {
+        // With planned breaks the line ends at the planned cluster; the greedy scan below is skipped.
+        let forced_stop: Option<usize> = planned.as_ref().and_then(|v| v.iter().copied().find(|e| *e >= c0));
+        while j < n && forced_stop.is_none() {
             let Some(c) = pl.clusters.get(j).cloned() else { break };
             match c.kind {
                 ClKind::LineBreak | ClKind::PageBreak | ClKind::ColumnBreak => {
@@ -2355,6 +2376,15 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
                 }
             }
             j += 1;
+        }
+        if let Some(stop) = forced_stop {
+            while j <= stop && j < n {
+                let Some(c) = pl.clusters.get(j) else { break };
+                xs.push(x);
+                x += c.adv;
+                j += 1;
+            }
+            end = if j >= n { LineEnd::Para } else { LineEnd::Wrap };
         }
         if skip {
             skipped += 1;
@@ -3231,6 +3261,7 @@ mod label_spacing_tests {
             read_line_spacing: None,
             fit_objects: false,
             fitted: &[],
+            optimal: false,
         };
         let mut p = Paragraph::with_text(if wrap { "Alpha probe synthetic business text repeated" } else { "Alpha probe" }, Default::default());
         p.props.line_spacing = Some(spacing);
