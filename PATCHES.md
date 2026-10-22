@@ -44,12 +44,13 @@ Patch 2, re-derived 2026-10-22 against upstream `8e986366` (the first version wa
 - **Speed** (offscreen key-to-GPU-complete, RTX A5000, 300 keystrokes in the middle of a 111k-word document): layout 33.5 ms to 12.9 ms, whole keystroke median 38.3 ms to 16.0 ms (headings); no change without headings or at 10k words.
 - **Not covered:** documents with inline objects take the original path and are therefore unchanged; footnotes, floats, columns, tables after headings, other languages and the Read view were not exercised.
 
-## Upstream candidates to evaluate (not carried)
+## Upstream candidates (evaluated 2026-10-22, not carried; details in the Plotworx runtime `.work/tasks/wordcraft-pr-evaluation-2026-10-22.md`)
 
-| Upstream | What | Why we care |
+| Upstream | What | Result against the Plotworx gate |
 |---|---|---|
-| PR [#675](https://github.com/storytold/wordcraft/pull/675) / issue [#554](https://github.com/storytold/wordcraft/issues/554) | Incremental pagination for large documents (open, mergeable) | Whole-manuscript editing latency. Issue [#1284](https://github.com/storytold/wordcraft/issues/1284) records that it can differ from a full layout after a page break: run the layout-equivalence check against it. |
-| PR [#2635](https://github.com/storytold/wordcraft/pull/2635) / issue [#1109](https://github.com/storytold/wordcraft/issues/1109) | Redraw only the changed band of a page on an edit (open) | The tablet's page re-raster cost. |
+| PR [#1292](https://github.com/storytold/wordcraft/pull/1292) (tip `670f4425`) for issue [#1284](https://github.com/storytold/wordcraft/issues/1284), stacked on #675 | Incremental pagination with the review fixes (page-break flag, part blocks, cache eviction) | **Recommended to carry** (owner decision pending; it would replace patch 2). 111k-word typing p95 about 4 ms against 16-18 ms; output equal to a full layout in every scenario tried (0 of 80 edits differed in the page-break scenario); layout tests 492 pass / 2 fail (same two Thai-font tests) vs 487 / 2; engine tests 883 / 0 vs 876 / 0. Untested: stale header, footnote and text-box pages, table cells, section breaks, cache growth. |
+| PR [#675](https://github.com/storytold/wordcraft/pull/675) (tip `cc12c5a3`) / issue [#554](https://github.com/storytold/wordcraft/issues/554) | Incremental pagination for large documents | **Do not carry alone:** reproduces issue #1284 (80 of 80 page-break edits differ from a full layout). Same speed-up as #1292. |
+| PR [#2635](https://github.com/storytold/wordcraft/pull/2635) (tip `c97f8f21`) / issue [#1109](https://github.com/storytold/wordcraft/issues/1109) | Redraw only the changed band of a page | App-canvas code (`ui-egui`); nothing to carry. Technique ported into Plotworx's own surface. |
 
 ## Pending (known, not yet carried)
 
