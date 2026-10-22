@@ -58,4 +58,6 @@ Patch 1 (Android fonts): compiles on the host; not yet verified on the tablet th
 
 ## Pending (known, not yet carried)
 
-None at present.
+| # | Change | Files | Why | Status |
+|---|---|---|---|---|
+| (candidate 3) | **Optimal (Knuth-Plass) line breaking for composition**, off by default (`LayoutOptions::optimal_breaks`) | `crates/layout/src/optimal.rs` (new), `para.rs`, `lib.rs`, `table.rs`; `crates/engine/src/session.rs` (one field); tests `tests_optimal.rs`; examples `layout/examples/optimal_bench.rs`, `engine/examples/optimal_compare.rs` | Owner requirement (2026-10-22): Desk's composition output uses Knuth-Plass; WordCraft's breaker is greedy. | **Spike on branch `feature/optimal-line-breaks`, not carried on `plotworx`.** Layout tests 506 pass / 2 fail (the same two Thai-font tests as before), engine 883 / 0. Upstream: no pull request exists to duplicate (searched for line breaking / Knuth in issues and PRs: see the Plotworx runtime note); nothing is sent upstream without the owner's review. |
