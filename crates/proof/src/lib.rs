@@ -1462,6 +1462,21 @@ mod tests {
         }
     }
 
+    /// Ordinary English the public-domain list lacked, found by running the check over real fiction (Plotworx Desk D-040): `heard` was flagged nine
+    /// times in 16,000 words. Inflections come from the rules, so only base forms are listed.
+    #[test]
+    fn the_supplement_has_common_words_the_moby_list_lacks() {
+        for w in [
+            "heard", "bled", "slid", "goodnight", "craftsmen", "dockworker", "dockworkers", "woodsmoke", "candlelit", "destabilize",
+            "destabilizing", "destabilized", "methodological", "specificity",
+        ] {
+            assert!(is_correct(w), "{w} should be accepted");
+        }
+        // The neighbours that were right before still are, and a misspelling next to a new word is still caught.
+        assert!(is_correct("hear") && is_correct("hearing") && is_correct("slide"));
+        assert!(!is_correct("heardd") && !is_correct("goodnigth") && !is_correct("specificty"));
+    }
+
     #[test]
     fn user_dictionary_works() {
         assert!(!is_correct("zxqwordcrafty"));

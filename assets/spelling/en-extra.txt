@@ -13,10 +13,12 @@ autosave
 backend
 bitcoin
 bitmap
+bled
 blockchain
 blog
 blogger
 bluetooth
+candlelit
 captcha
 caregiver
 carpool
@@ -36,6 +38,7 @@ configurable
 copyedit
 coronavirus
 covid
+craftsmen
 crowdfunding
 crowdsource
 crypto
@@ -49,6 +52,8 @@ database
 dataset
 daycare
 desktop
+destabilize
+dockworker
 download
 downloadable
 downsize
@@ -79,12 +84,14 @@ gigabyte
 github
 glamour
 globalization
+goodnight
 google
 groupthink
 hackathon
 hardcode
 hashtag
 healthcare
+heard
 homepage
 homeschool
 honour
@@ -121,6 +128,7 @@ megabyte
 megapixel
 meme
 metadata
+methodological
 microchip
 microsoft
 middleware
@@ -171,10 +179,12 @@ selfie
 signup
 sitemap
 skillset
+slid
 smartphone
 smartwatch
 smiley
 snowboard
+specificity
 spellcheck
 spellchecker
 spreadsheet
@@ -231,6 +241,7 @@ wifi
 wiki
 wikipedia
 wireframe
+woodsmoke
 wordcraft
 workaround
 workflow
