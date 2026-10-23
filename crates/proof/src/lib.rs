@@ -919,9 +919,11 @@ fn grammar_en(text: &str, capital_first: bool) -> Vec<Issue> {
     }
     // Sentence start capital.
     let mut after_end = capital_first;
+    // The sentence ended with `?"` or `!"`: a lowercase word that follows is a dialogue tag (`"Why?" she asked.`), not a missed capital.
+    let mut dialogue_tag = false;
     for (a, b) in &ws {
         let Some(w) = text.get(*a..*b) else { continue };
-        if after_end && w.chars().next().is_some_and(char::is_lowercase) && w.chars().all(char::is_alphabetic) {
+        if after_end && !dialogue_tag && w.chars().next().is_some_and(char::is_lowercase) && w.chars().all(char::is_alphabetic) {
             let fixed: String = w.chars().next().map(|f| f.to_uppercase().chain(w.chars().skip(1)).collect()).unwrap_or_default();
             v.push(Issue {
                 start: *a,
@@ -939,6 +941,7 @@ fn grammar_en(text: &str, capital_first: bool) -> Vec<Issue> {
         after_end = matches!(punctuation.chars().next(), Some('.' | '!' | '?'))
             && !punctuation.starts_with("..")
             && punctuation.trim_start_matches(['.', '!', '?', '"', '”', ')']).starts_with(' ');
+        dialogue_tag = matches!(punctuation.chars().next(), Some('!' | '?')) && punctuation.trim_start_matches(['!', '?']).starts_with(['"', '”']);
     }
     v.sort_by_key(|i| i.start);
     v
@@ -1464,11 +1467,52 @@ mod tests {
 
     /// Ordinary English the public-domain list lacked, found by running the check over real fiction (Plotworx Desk D-040): `heard` was flagged nine
     /// times in 16,000 words. Inflections come from the rules, so only base forms are listed.
+    /// A lowercase word after `?"` or `!"` is a dialogue tag (`"How much have you written?" she asked.`), not a missed capital (Plotworx Desk D-041).
+    /// A full stop is different: a tag after `."` is still flagged, and so is anything after a bare `?`/`!` with no closing quote.
+    #[test]
+    fn a_dialogue_tag_after_a_question_or_exclamation_is_not_flagged() {
+        let capitals = |text: &str| -> Vec<String> {
+            check_grammar(text)
+                .into_iter()
+                .filter(|issue| issue.message == "Capitalize the first word of a sentence")
+                .map(|issue| text[issue.start..issue.end].to_owned())
+                .collect()
+        };
+        for text in [
+            "\"How much have you written?\" she asked.",
+            "\"Stop!\" he said.",
+            "\u{201c}How much have you written?\u{201d} she asked.",
+            "\u{201c}Stop!\u{201d} he said.",
+            "\"What?!\" she said.",
+            "She nodded. \"Why?\" he asked quietly.",
+        ] {
+            assert!(capitals(text).is_empty(), "{text}: {:?}", capitals(text));
+        }
+        // Still errors: a full stop, no closing quote, and a lowercase word that really starts a sentence.
+        assert_eq!(capitals("\"Stop.\" he said."), ["he"]);
+        assert_eq!(capitals("I saw? a figure."), ["a"]);
+        assert_eq!(capitals("I saw! a figure."), ["a"]);
+        assert_eq!(capitals("I saw.\" a figure."), ["a"]);
+        assert_eq!(capitals("\"Why?\" She asked. he left."), ["he"], "the next sentence after the tag is checked as usual");
+    }
+
     #[test]
     fn the_supplement_has_common_words_the_moby_list_lacks() {
         for w in [
-            "heard", "bled", "slid", "goodnight", "craftsmen", "dockworker", "dockworkers", "woodsmoke", "candlelit", "destabilize",
-            "destabilizing", "destabilized", "methodological", "specificity",
+            "heard",
+            "bled",
+            "slid",
+            "goodnight",
+            "craftsmen",
+            "dockworker",
+            "dockworkers",
+            "woodsmoke",
+            "candlelit",
+            "destabilize",
+            "destabilizing",
+            "destabilized",
+            "methodological",
+            "specificity",
         ] {
             assert!(is_correct(w), "{w} should be accepted");
         }
