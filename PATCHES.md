@@ -40,6 +40,18 @@ A Plotworx build always records the exact revision it was built from (so a relea
 
 ## Validation of carried patches (re-run on every sync and whenever the carried PR's tip moves)
 
+**2026-10-24 sync candidate `6b161f5d`** (upstream `main` `cf2fe473`; carried PR #1292 head `3927aa5d`): input correctness 1,000 × 120 events, 0 mismatches, negative control 183/183; incremental/full-layout equivalence 750 edits, 0 differences; band-render comparison 4/4 PASS (maximum pixel difference 1/255); WordCraft engine 925 passed, integration 41 passed / 1 measurement ignored; WordCraft layout 518 passed / 2 missing-Thai-font failures. The same two layout failures reproduced on upstream `main` `cf2fe473` (499 passed / 2 failed); engine baseline was 917 passed. The runtime `cargo xtask ci` passed using local path overrides to this exact sync commit. Android-specific source lines did not change in this sync; no tablet/device check was run. The Android font-directory patch remains unverified on-device.
+
+Latency, offscreen key-to-GPU-complete on RTX A5000 (1440×900, 300 events + 30 warmup):
+
+| Case | Median ms | p95 ms |
+|---|---:|---:|
+| 10k words, typing | 1.16 | 1.62 |
+| 111k words, typing | 2.48 | 3.12 |
+| 111k words with headings, typing | 2.60 | 3.24 |
+| 111k words with headings, Enter | 9.54 | 11.35 |
+| 111k words with headings, paste | 10.89 | 12.78 |
+
 Carried PR #1292 at tip `670f4425` on upstream `8e986366`, evaluated 2026-10-22 (details in the Plotworx runtime's `.work/tasks/wordcraft-pr-evaluation-2026-10-22.md`):
 
 - **Output equivalence:** the Plotworx `fp` tool hashes every placed page item of nine documents before and after eight edits: all nine identical to unpatched `main`. Its `--selfcheck` compares the live (incremental) layout with a from-scratch layout after every edit: **0 differences** across generated manuscripts (headings, numbered lists), WordCraft's own samples and the **page-break scenario from issue #1284** (80 edits). PR #675 alone fails that scenario (80 of 80 differ).
