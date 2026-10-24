@@ -9530,6 +9530,7 @@ Callowen had been written five times and every one of those histories had been w
     let live_after = line_starts(&s.layout());
     assert_ne!(greedy_export, optimal_export, "the export layout takes the preference");
     assert_eq!(live_before, live_after, "the live layout is greedy whatever the preference");
+}
 
 #[test]
 fn headless_ui_requests_stay_bounded() {
