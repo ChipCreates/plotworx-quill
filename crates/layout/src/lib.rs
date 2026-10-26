@@ -2561,7 +2561,7 @@ fn layout_pass(
         } else {
             with_pct_base(&mut ctx, hb(heads.first), |c| body_top_for(c, sect, heads.first))
         };
-        let foot_top = if reflow || turn.is_turned() { f32::MAX } else { section_foot_top(&mut ctx, &sections, (si, sect)) };
+        let foot_top = if reflow || turn.is_turned() { f32::MAX } else { section_foot_top(&mut ctx, (si, sect)) };
         let first_foot = if reflow || turn.is_turned() || !sect.title_page {
             foot_top
         } else {
@@ -2689,7 +2689,7 @@ fn layout_pass(
         let (counters, eq_count, boxes) = (ctx.counters.clone(), ctx.eq_count, ctx.boxes.total());
         begin_section(&mut ctx, &mut pb, (si, s), totals);
         // Measured without the grid, as in the section loop.
-        pb.foot_top = section_foot_top(&mut ctx, &sections, (si, s));
+        pb.foot_top = section_foot_top(&mut ctx, (si, s));
         ctx.grid = para::Grid::of(doc, s);
         (ctx.counters, ctx.eq_count, ctx.boxes) = (counters, eq_count, wordcraft_doc::BoxBudget::counted(boxes));
     }
@@ -2846,9 +2846,10 @@ fn begin_section<'a>(ctx: &mut Ctx, pb: &mut PageBuilder<'a>, (si, sect): (usize
 }
 
 /// The top of section `si`'s default footer (a linked one included) on its pages.
-fn section_foot_top(ctx: &mut Ctx, sections: &[(usize, &SectionProps)], (si, sect): (usize, &SectionProps)) -> f32 {
-    let feet = linked(sections, si, |s| s.footers);
-    let base = defining_width(sections, si, |s| s.footers, feet.default);
+fn section_foot_top(ctx: &mut Ctx, (si, sect): (usize, &SectionProps)) -> f32 {
+    let hf = Arc::clone(&ctx.hf);
+    let feet = hf.feet.set(si);
+    let base = hf.defining_width(true, si, feet.default);
     with_pct_base(ctx, base, |c| foot_top_for(c, sect, feet.default))
 }
 
