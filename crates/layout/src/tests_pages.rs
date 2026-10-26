@@ -722,8 +722,7 @@ fn a_bordered_group_split_by_a_page_break_resumes_like_a_full_layout() {
     // #1284 (review): the paragraph before a checkpoint ends on its page; the border of the one
     // after it that joins it draws up to that end, resumed or not.
     use wordcraft_doc::props::{Border, Borders};
-    let mut d = Document::from_text(&"Boxed text that runs over a few lines of the page, again and again. ".repeat(30).replace(". ", ".
-"));
+    let mut d = Document::from_text(&"Boxed text that runs over a few lines of the page, again and again. ".repeat(30).replace(". ", ".\n"));
     let n = d.body.len();
     for i in 0..n {
         if let Ok(p) = d.para_mut(StoryRef::Body, &Path::top(i)) {
@@ -781,4 +780,3 @@ fn a_page_ends_when_a_multiple_spaced_lines_text_no_longer_fits() {
         assert!(past_margin > 0, "{multiple}: some shift should leave the last line's leading past the margin");
     }
 }
-
