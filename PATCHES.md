@@ -1,40 +1,36 @@
-# Plotworx patches to WordCraft
+# Quill: change and import log
 
-This is the Plotworx fork of [storytold/wordcraft](https://github.com/storytold/wordcraft). WordCraft changes daily, so the fork follows upstream
-continuously instead of freezing a version. These rules keep that cheap.
+Quill is the Plotworx editor component (see [QUILL.md](QUILL.md)). It began as the Plotworx fork of [storytold/wordcraft](https://github.com/storytold/wordcraft) and was renamed on 2026-10-31 (owner decision): it is its own component and **remains importable from upstream**. This file is the register of Quill's own changes (the table below, historically called patches), the import procedure, and the validation record. Plotworx builds always record the exact Quill revision, and the upstream revision it last imported; Quill is neither frozen to an upstream version nor obliged to follow it.
 
 ## Branches
 
 | Branch | Purpose |
 |---|---|
 | `main` | An exact mirror of `upstream/main`. Fast-forward only. **Never commit to it.** |
-| `plotworx` | `main` plus the patches listed below, kept as few and as small as possible. Plotworx depends on this branch. |
+| `plotworx` | Quill's trunk: `main` plus the changes listed below. Plotworx depends on this branch. |
 
-## Sync procedure (run on a regular schedule, not ad hoc)
+## Import procedure
+
+Run on demand: when the owner or a task wants WordCraft's changes (workspace `AGENTS.md`, "Upstream dependencies: Quill"). There is no schedule. Quill was 255 commits behind upstream on 2026-10-31 (last import 2026-10-26); the first import after the rename is an ordinary gated merge.
 
 1. `git fetch upstream && git checkout main && git merge --ff-only upstream/main && git push origin main`
-2. `git checkout plotworx && git rebase main` (a conflict means a patch needs re-deriving; see "Pending" below).
-3. Build and run the Plotworx gate against `plotworx` (latency matrix, input-correctness run, render checks, Android input checks) before anyone depends on the new revision.
-4. Record the sync: upstream revision, patches carried, gate results (in the Plotworx runtime repository's `.work`).
+2. From `plotworx`, create `sync/<date>` and merge `main` into it (no force-push, history preserved). A rebase is used only in an isolated, unpublished candidate with a recovery ref. A conflict means a change needs re-deriving or an upstream PR carried here has merged (then drop the carried copy).
+3. Build and run the Plotworx gate against the candidate (latency matrix, input-correctness run, layout-equivalence check, the layout tests, render checks, Android input checks when Android is affected) before anyone depends on the new revision. A failing import is held on its branch until fixed or reported; it is not adopted.
+4. Record the import: upstream revision, changes carried, gate results (in the Plotworx runtime repository's `.work`), and update the validation record below. Then fast-forward `plotworx` to the candidate.
 
-When `plotworx` carries an upstream PR as merge commits, `git rebase main` replays the PR's own
-history onto the new base. Since 2026-10-24 the documented sync instead merges `main` into a
-`sync/<date>` branch from `plotworx`, so published history is preserved and the push is a
-fast-forward; no force-push. A rebase is only used in an isolated, unpublished candidate with a
-recovery ref.
+A Plotworx build always records the exact Quill revision it was built from, so a release can be reproduced.
 
-A Plotworx build always records the exact revision it was built from (so a release can be reproduced); the policy is to keep moving that revision forward, not to freeze it.
+## Rules for changes
 
-## Rules for patches
-
+- **Keep Quill's changes mergeable.** Prefer new crates or modules to edits of upstream files; upstream-owned files (`README.md`, `AGENTS.md`, `CLAUDE.md`, `ROADMAP.md`, `NOTICE`, workflows) are left as upstream has them.
 - **Before adding or keeping a patch, search upstream issues and pull requests** and record the numbers with links in the register. Do not duplicate an open pull request: carry it, naming the PR, and drop it when upstream merges it.
 - **Nothing is sent upstream without the owner's review of the exact diff and text** (pull requests, issues, comments).
-- Keep each patch in its own commit, with a `Patch:` line in the message that names its entry here.
-- Every generic patch is offered upstream and removed from this list when upstream has it. A patch that stays here needs a reason.
-- Never edit upstream files for convenience; if a change is not a patch listed here it does not belong on `plotworx`.
-- Licence: WordCraft is `MIT OR Apache-2.0`; keep its notices. The ArtCraft name, wordmark and logos in `docs/brand/` are trademarks and are **not** open source: do not ship them in Plotworx products.
+- Keep each change in its own commit, with a `Change:` or `Patch:` line in the message that names its entry here.
+- A change that is generic may be offered upstream, only after the owner reviews the exact diff and text; when upstream has it, drop Quill's copy. A change that stays here needs a reason.
+- Changes are expected: Quill is an independent component. The restriction is on convenience edits to upstream files, which make imports expensive.
+- Licence: upstream is `MIT OR Apache-2.0`; keep its notices. The ArtCraft name, wordmark and logos are trademarks and are **not** open source; upstream says forks and modified versions must remove them, so `docs/brand/` was removed on 2026-10-31 and none may be shipped in Quill or in Plotworx products.
 
-## Carried patches
+## Quill's changes (carried patches)
 
 | # | Change | Files | Why | Upstream |
 |---|---|---|---|---|
@@ -45,7 +41,7 @@ A Plotworx build always records the exact revision it was built from (so a relea
 | 5 | **English grammar: a dialogue tag after `?"` or `!"` is not "Capitalize the first word of a sentence"** (`"How much have you written?" she asked.`) | `crates/proof/src/lib.rs` (`check_grammar`, sentence-start rule; test `a_dialogue_tag_after_a_question_or_exclamation_is_not_flagged`) | Ordinary in fiction; flagged with the suggestion `She` (Plotworx Desk D-041). A tag after `."`, a bare `?`/`!` and a real sentence start are still flagged; upstream's own tests for those pass unchanged. | **No upstream issue or PR** (searched 2026-10-23). Rechecked 2026-10-26: `main`'s `grammar_en` still sets `after_end` after `?"`/`!"`, so the false positive remains; the only related upstream item is German sentence-ending punctuation PR [#2664](https://github.com/storytold/wordcraft/pull/2664) (open, unrelated). Generic: could be offered upstream; not submitted, the owner approves the exact diff and text first. **Owner decision 2026-10-23: carry it.** |
 | 6 | **Layout test build: import `Page` and `Rgb` in `tests_linear.rs`** (test-only, one line: `Page` in the `super::` list and `use wordcraft_doc::props::Rgb`) | `crates/layout/src/tests_linear.rs` | Upstream `main` `2c99a427` does not compile `wordcraft-layout`'s test target: commit `4bb3679e` replaced `use super::*` with an explicit list and omitted `Page` and `Rgb`. `gate / gate (ubuntu-24.04)` failed on that commit. Needed for the fork's required `cargo xtask ci` and layout tests to build at all. | **Carried upstream PRs [#4417](https://github.com/storytold/wordcraft/pull/4417) and [#4401](https://github.com/storytold/wordcraft/pull/4401)** (both open, same one-line fix). Drop this entry as soon as upstream merges either. |
 
-## Validation of carried patches (re-run on every sync and whenever the carried PR's tip moves)
+## Validation of carried patches (re-run on every import and whenever a carried PR's tip moves)
 
 **2026-10-26 sync candidate `a4800fbb`** (upstream `main` `2c99a427803364354181d0bc20865f05880605f7`, workspace 0.11.0; carried PR #1292 head `8a610273c844c71700c312b71a1da02b95277995`; fork `plotworx` base `6fab82eb`): all six patches carried (1 Android font directories unchanged; 2 PR #1292 re-merged; 3 optimal line breaking re-based and adapted to the 0.11 `HfLinks` header/footer refactor; 4/5 unchanged; 6 new, test-only). Refreshed upstream search found no issue or PR that supersedes 1, 3, 4 or 5; PR #1292 remains open and unmerged. The fork's `cargo xtask ci` passed **all 8 stages** (fmt, clippy, 4,610 workspace tests with 0 failed and 5 skipped, i18n report, doctest, assets, layers, wasm) in a clean worktree with `CRAFT_FONTS_DIR` set to craft-fonts at the workflow's pin `b076417b5880bd4154bd22f00695b1d28c6bea83`. Without that input, three Thai substitution tests fail on a host that has a system Thai font (Plotworx runtime D-063); with it, all ten Thai tests pass. Runtime consumer gate against this candidate: `cargo xtask ci` all stages passed, 501 tests, 0 failed; input correctness 1,000 × 120 = 120,000 events, 0 mismatches, negative control 183/183; incremental/full-layout equivalence five documents × 150 edits = 750, 0 differences; band-render comparison 4/4 PASS (max 1/255, 0.0001-0.0006% differing). Android: the Android-specific patch lines are unchanged, but the surrounding font database changed. Host `cargo check -p wordcraft-fonts --target aarch64-linux-android` passes, and the attached onn 7 (Android 16/API 36) passed a device check with the harness at this revision: Gboard `commitText` typing, Enter and backspace, and the emoji palette inserting 😀 rendered in colour. With the harness's manual emoji-font add removed, `FontDb::global().has_family("Noto Color Emoji")` is true through the Android system font directories (patch 1) and 😀 still renders in colour. IME composing/preedit and clipboard were not re-run (runtime F-1 note).
 
